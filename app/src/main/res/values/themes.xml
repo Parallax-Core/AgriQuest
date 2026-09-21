@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.AgriQuest" parent="Theme.MaterialComponents.Light" />
+</resources>
