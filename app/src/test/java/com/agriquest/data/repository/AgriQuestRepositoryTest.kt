@@ -1,5 +1,6 @@
 package com.agriquest.data.repository
 
+import com.agriquest.domain.model.AgroQuizQuestion
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.ConnectionStatus
 import com.agriquest.domain.model.FanMode
@@ -11,6 +12,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -222,13 +224,138 @@ class AgriQuestRepositoryTest {
 
         // Initial streak
         assertEquals(0, repo.plantAvatar.value.streakDays)
+        assertEquals(0, repo.streakDays.value)
 
         // Increment streak
         repo.incrementStreak()
         assertEquals(1, repo.plantAvatar.value.streakDays)
+        assertEquals(1, repo.streakDays.value)
+
+        // Set streak days directly
+        repo.setStreakDays(5)
+        assertEquals(5, repo.plantAvatar.value.streakDays)
+        assertEquals(5, repo.streakDays.value)
 
         // Reset streak to 0
         repo.resetStreak()
         assertEquals(0, repo.plantAvatar.value.streakDays)
+        assertEquals(0, repo.streakDays.value)
+    }
+
+    @Test
+    fun checkAndResetMidnightQuests_firstCall_resetsQuestsAndSavesDate() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+
+        // First call with explicit date
+        val resetOccurred = repo.checkAndResetMidnightQuests("2026-03-30")
+        assertTrue(resetOccurred)
+        assertEquals(3, repo.quests.value.size)
+        assertTrue(repo.quests.value.all { !it.isClaimed })
+
+        // Second call on same date should not reset
+        val secondResetOccurred = repo.checkAndResetMidnightQuests("2026-03-30")
+        assertFalse(secondResetOccurred)
+    }
+
+    @Test
+    fun checkAndResetMidnightQuests_consecutiveNextDay_resetsQuestsAndPreservesStreak() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+
+        // Set initial reset date
+        repo.checkAndResetMidnightQuests("2026-03-30")
+
+        // User completes quests and builds streak
+        repo.setStreakDays(3)
+        repo.claimQuest(repo.quests.value.first().id)
+
+        // Advance to next consecutive calendar day (1 day difference)
+        val resetOccurred = repo.checkAndResetMidnightQuests("2026-03-31")
+        assertTrue(resetOccurred)
+        assertEquals(3, repo.plantAvatar.value.streakDays)
+        assertTrue(repo.quests.value.all { !it.isClaimed })
+    }
+
+    @Test
+    fun checkAndResetMidnightQuests_missedDay_resetsStreakToZeroAndResetsQuests() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+
+        // Set initial reset date
+        repo.checkAndResetMidnightQuests("2026-03-30")
+
+        // User has a 5-day streak
+        repo.setStreakDays(5)
+
+        // Advance date by 3 days (missed days between March 30 and April 2)
+        val resetOccurred = repo.checkAndResetMidnightQuests("2026-04-02")
+        assertTrue(resetOccurred)
+        assertEquals(0, repo.plantAvatar.value.streakDays)
+        assertTrue(repo.quests.value.all { !it.isClaimed })
+    }
+
+    @Test
+    fun submitQuizAnswer_correctOption_awards30XpAndMarksQuizCompleted() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        val question = repo.currentQuizQuestion.value
+        assertEquals("quiz_soil_moisture", question.id)
+        assertEquals(1, question.correctOptionIndex)
+
+        // Submit correct answer (option index 1 = "60-80%")
+        val isCorrect = repo.submitQuizAnswer(1)
+
+        assertTrue(isCorrect)
+        assertEquals(30, repo.plantAvatar.value.currentXp)
+        assertTrue(repo.isQuizCompletedToday.value)
+        assertEquals(1, repo.selectedQuizOptionIndex.value)
+        assertEquals(true, repo.isQuizAnswerCorrect.value)
+    }
+
+    @Test
+    fun submitQuizAnswer_incorrectOption_returnsFalseAndMarksQuizCompletedWithoutXp() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        val question = repo.currentQuizQuestion.value
+        assertEquals("quiz_soil_moisture", question.id)
+
+        // Submit incorrect answer (option index 0 = "10-30%")
+        val isCorrect = repo.submitQuizAnswer(0)
+
+        assertFalse(isCorrect)
+        assertEquals(0, repo.plantAvatar.value.currentXp)
+        assertTrue(repo.isQuizCompletedToday.value)
+        assertEquals(0, repo.selectedQuizOptionIndex.value)
+        assertEquals(false, repo.isQuizAnswerCorrect.value)
+    }
+
+    @Test
+    fun resetQuizState_forcesCleanUnansweredQuizState() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        repo.submitQuizAnswer(1)
+
+        assertEquals(1, repo.selectedQuizOptionIndex.value)
+        assertTrue(repo.isQuizCompletedToday.value)
+
+        repo.resetQuizState()
+
+        assertEquals(-1, repo.selectedQuizOptionIndex.value)
+        assertFalse(repo.isQuizCompletedToday.value)
+        assertNull(repo.isQuizAnswerCorrect.value)
+    }
+
+    @Test
+    fun nextQuizQuestion_cyclesThroughQuizPoolAndResetsAnswerState() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        assertEquals("quiz_soil_moisture", repo.currentQuizQuestion.value.id)
+        repo.submitQuizAnswer(1)
+
+        assertEquals(1, repo.selectedQuizOptionIndex.value)
+        assertTrue(repo.isQuizCompletedToday.value)
+
+        // Cycle to next question
+        repo.nextQuizQuestion()
+
+        val nextQuestion = repo.currentQuizQuestion.value
+        assertEquals("quiz_light_spectrum", nextQuestion.id)
+        assertEquals(-1, repo.selectedQuizOptionIndex.value)
+        assertFalse(repo.isQuizCompletedToday.value)
+        assertNull(repo.isQuizAnswerCorrect.value)
     }
 }

@@ -60,7 +60,7 @@ data class PlantAvatar(
     val xpText: String
         get() = "$currentXp/$maxXp XP"
 
-    /** Helper property formatting streak ratio (e.g. "4/7"). */
+    /** Helper property formatting streak ratio (e.g. "$streakDays/$targetStreakDays"). */
     val streakText: String
         get() = "$streakDays/$targetStreakDays"
 

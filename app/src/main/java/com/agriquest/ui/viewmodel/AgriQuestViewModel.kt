@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import com.agriquest.data.repository.AgriQuestRepositoryImpl
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
+import com.agriquest.domain.model.AgroQuizQuestion
 import com.agriquest.domain.model.AiScanResult
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.ConnectionStatus
@@ -55,7 +56,7 @@ class AgriQuestViewModel(
     }
 
     // Notification / Toast UI event stream
-    private val _notificationEvents = MutableSharedFlow<String>()
+    private val _notificationEvents = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val notificationEvents: SharedFlow<String> = _notificationEvents.asSharedFlow()
 
     // Combined UI state flow for Jetpack Compose UI
@@ -69,8 +70,12 @@ class AgriQuestViewModel(
         repository.plantSource,
         repository.connectionState,
         repository.actuatorState,
-        repository.recentScans
-    ) { flows: Array<Any> ->
+        repository.recentScans,
+        repository.currentQuizQuestion,
+        repository.isQuizCompletedToday,
+        repository.selectedQuizOptionIndex,
+        repository.isQuizAnswerCorrect
+    ) { flows: Array<Any?> ->
         AgriQuestUiState(
             telemetry = flows[0] as TelemetryData,
             plant = flows[1] as PlantAvatar,
@@ -80,13 +85,35 @@ class AgriQuestViewModel(
             plantSource = flows[5] as PlantSource,
             connection = flows[6] as ConnectionState,
             actuator = flows[7] as ActuatorState,
-            recentScans = flows[8] as List<AiScanResult>
+            recentScans = flows[8] as List<AiScanResult>,
+            currentQuizQuestion = flows[9] as AgroQuizQuestion,
+            isQuizCompletedToday = flows[10] as Boolean,
+            selectedQuizOptionIndex = flows[11] as Int,
+            isQuizAnswerCorrect = flows[12] as Boolean?
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
         initialValue = AgriQuestUiState()
     )
+
+    init {
+        repository.resetQuizState()
+        checkAndResetMidnightQuests()
+        repository.resetQuizState()
+    }
+
+    /**
+     * Action to check calendar date and reset midnight quests if a new calendar day has arrived.
+     */
+    fun checkAndResetMidnightQuests() {
+        viewModelScope.launch {
+            val wasReset = repository.checkAndResetMidnightQuests()
+            if (wasReset) {
+                _notificationEvents.emit("🌅 New Day! Daily quests updated for today!")
+            }
+        }
+    }
 
     /**
      * Action to add XP points directly to user progression.
@@ -256,5 +283,26 @@ class AgriQuestViewModel(
                 }
             )
         )
+    }
+
+    /**
+     * Action to submit daily quiz answer option index.
+     * If selected option is correct: awards +30 XP, checks for level up, marks today's quiz completed in DataStore,
+     * emits celebration toast "🎉 Correct! +30 XP Awarded!".
+     * Returns answer result so UI displays correct/incorrect answer feedback and explanation.
+     */
+    suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean {
+        val isCorrect = repository.submitQuizAnswer(selectedOptionIndex)
+        if (isCorrect) {
+            _notificationEvents.emit("🎉 Correct! +30 XP Awarded!")
+        }
+        return isCorrect
+    }
+
+    /**
+     * Action to advance to next question in quiz pool / shuffle quiz for testing.
+     */
+    fun nextQuizQuestion() {
+        repository.nextQuizQuestion()
     }
 }

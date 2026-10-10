@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import com.agriquest.ui.ai.AiDiagnosticsScreenContent
 import com.agriquest.ui.awards.AwardsScreenContent
 import com.agriquest.ui.components.ActuatorControlsCard
 import com.agriquest.ui.components.AgriQuestBottomNav
+import com.agriquest.ui.components.DailyQuizCard
 import com.agriquest.ui.components.DailyQuestsDashboardSection
 import com.agriquest.ui.components.Esp32HardwareSetupDialog
 import com.agriquest.ui.components.PlantAvatarHeroCard
@@ -49,6 +51,7 @@ import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.theme.Slate50
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Main AgriQuest Dashboard & Navigation Switcher Screen.
@@ -64,6 +67,7 @@ fun DashboardScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showEsp32SetupDialog by remember { mutableStateOf(false) }
 
@@ -118,6 +122,10 @@ fun DashboardScreen(
         },
         onPerformScan = { viewModel.performCameraScan() },
         onResetStreak = { viewModel.resetStreak() },
+        onAnswerQuiz = { optionIndex ->
+            coroutineScope.launch { viewModel.submitQuizAnswer(optionIndex) }
+        },
+        onNextQuizQuestion = { viewModel.nextQuizQuestion() },
         snackbarHostState = snackbarHostState
     )
 }
@@ -144,6 +152,8 @@ fun DashboardScreenContent(
     onScanForEsp32: () -> Unit = {},
     onPerformScan: () -> Unit = {},
     onResetStreak: () -> Unit = {},
+    onAnswerQuiz: (Int) -> Unit = {},
+    onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     when (selectedTab) {
@@ -162,6 +172,8 @@ fun DashboardScreenContent(
             onTabSelected = onTabSelected,
             onCompleteQuest = onClaimQuest,
             onSimulateNextDay = onSimulateNextDay,
+            onAnswerQuiz = onAnswerQuiz,
+            onNextQuizQuestion = onNextQuizQuestion,
             snackbarHostState = snackbarHostState
         )
         3 -> AiDiagnosticsScreenContent(
@@ -190,6 +202,8 @@ fun DashboardScreenContent(
             onTriggerPump = onTriggerPump,
             onToggleFanMode = onToggleFanMode,
             onScanForEsp32 = onScanForEsp32,
+            onAnswerQuiz = onAnswerQuiz,
+            onNextQuizQuestion = onNextQuizQuestion,
             snackbarHostState = snackbarHostState
         )
     }
@@ -210,6 +224,8 @@ fun HomeDashboardContent(
     onTriggerPump: () -> Unit = {},
     onToggleFanMode: () -> Unit = {},
     onScanForEsp32: () -> Unit = {},
+    onAnswerQuiz: (Int) -> Unit = {},
+    onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     Scaffold(
@@ -272,21 +288,31 @@ fun HomeDashboardContent(
                     onViewMoreClick = { onTabSelected(1) }
                 )
 
-                // 5. Daily Quests Section
+                // 5. Daily Agro-Quiz Card
+                DailyQuizCard(
+                    question = uiState.currentQuizQuestion,
+                    isQuizCompletedToday = uiState.isQuizCompletedToday,
+                    selectedOptionIndex = uiState.selectedQuizOptionIndex,
+                    isAnswerCorrect = uiState.isQuizAnswerCorrect,
+                    onAnswerSelected = onAnswerQuiz,
+                    onNextQuestion = onNextQuizQuestion
+                )
+
+                // 6. Daily Quests Section
                 DailyQuestsDashboardSection(
                     quests = uiState.quests,
                     onClaimQuest = onClaimQuest,
                     onViewAllQuestsClick = { onTabSelected(2) }
                 )
 
-                // 6. Active Quest Banner
+                // 7. Active Quest Banner
                 QuestBanner(
                     quest = uiState.activeQuest,
                     quests = uiState.quests,
                     onClaimQuest = onClaimQuest
                 )
 
-                // 7. Controls Section (2 Dark Teal/Blue Buttons)
+                // 8. Controls Section (2 Dark Teal/Blue Buttons)
                 ActuatorControlsCard(
                     actuatorState = uiState.actuator,
                     onTriggerPump = onTriggerPump,

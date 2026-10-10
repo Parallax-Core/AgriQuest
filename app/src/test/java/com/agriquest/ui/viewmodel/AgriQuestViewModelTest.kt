@@ -11,11 +11,14 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -254,5 +257,85 @@ class AgriQuestViewModelTest {
         assertTrue(notifications.any { it.contains("Care streak reset to 0 days") })
 
         job.cancel()
+    }
+
+    @Test
+    fun checkAndResetMidnightQuests_triggersResetAndEmitsNotification() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        val viewModel = AgriQuestViewModel(repo)
+        val notifications = mutableListOf<String>()
+
+        val job = launch {
+            viewModel.notificationEvents.collect {
+                notifications.add(it)
+            }
+        }
+
+        viewModel.checkAndResetMidnightQuests()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.quests.isNotEmpty())
+
+        job.cancel()
+    }
+
+    @Test
+    fun submitQuizAnswer_correctOption_updatesUiStateAndEmitsCelebrationToast() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        val viewModel = AgriQuestViewModel(repo)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val notifications = mutableListOf<String>()
+
+        val job = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.notificationEvents.collect {
+                notifications.add(it)
+            }
+        }
+
+        val isCorrect = viewModel.submitQuizAnswer(1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(isCorrect)
+        val state = viewModel.uiState.value
+        assertEquals(30, state.plant.currentXp)
+        assertTrue(state.isQuizCompletedToday)
+        assertEquals(1, state.selectedQuizOptionIndex)
+        assertEquals(true, state.isQuizAnswerCorrect)
+        assertTrue(notifications.any { it.contains("🎉 Correct! +30 XP Awarded!") })
+
+        job.cancel()
+    }
+
+    @Test
+    fun submitQuizAnswer_incorrectOption_updatesUiStateAndReturnsFalse() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        val viewModel = AgriQuestViewModel(repo)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val isCorrect = viewModel.submitQuizAnswer(0)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(isCorrect)
+        val state = viewModel.uiState.value
+        assertEquals(0, state.plant.currentXp)
+        assertTrue(state.isQuizCompletedToday)
+        assertEquals(0, state.selectedQuizOptionIndex)
+        assertEquals(false, state.isQuizAnswerCorrect)
+    }
+
+    @Test
+    fun nextQuizQuestion_updatesCurrentQuestionInUiState() = runTest {
+        val repo = AgriQuestRepositoryImpl()
+        val viewModel = AgriQuestViewModel(repo)
+
+        assertEquals("quiz_soil_moisture", viewModel.uiState.value.currentQuizQuestion.id)
+
+        viewModel.nextQuizQuestion()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("quiz_light_spectrum", viewModel.uiState.value.currentQuizQuestion.id)
+        assertEquals(-1, viewModel.uiState.value.selectedQuizOptionIndex)
+        assertFalse(viewModel.uiState.value.isQuizCompletedToday)
+        assertNull(viewModel.uiState.value.isQuizAnswerCorrect)
     }
 }

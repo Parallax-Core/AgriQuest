@@ -6,6 +6,7 @@ import com.agriquest.data.local.AgriQuestDataStore
 import com.agriquest.data.simulation.TelemetrySimulationEngine
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
+import com.agriquest.domain.model.AgroQuizQuestion
 import com.agriquest.domain.model.AiScanResult
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.ConnectionStatus
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Implementation of [AgriQuestRepository] managing live domain state, leveling progression,
@@ -53,6 +57,7 @@ class AgriQuestRepositoryImpl(
 
     private val scope = coroutineScope ?: CoroutineScope(Dispatchers.Default)
 
+    private var memoryLastResetDate: String? = null
     private var simulationJob: Job? = null
     private var bleStateJob: Job? = null
     private var bleTelemetryJob: Job? = null
@@ -66,6 +71,9 @@ class AgriQuestRepositoryImpl(
         )
     )
     override val telemetryData: StateFlow<TelemetryData> = _telemetryData.asStateFlow()
+
+    private val _streakDays = MutableStateFlow(0)
+    val streakDays: StateFlow<Int> = _streakDays.asStateFlow()
 
     private val _plantAvatar = MutableStateFlow(
         PlantAvatar(
@@ -116,19 +124,35 @@ class AgriQuestRepositoryImpl(
     private val _recentScans = MutableStateFlow(AiScanResult.DEFAULT_SCANS)
     override val recentScans: StateFlow<List<AiScanResult>> = _recentScans.asStateFlow()
 
+    private val _currentQuizQuestion = MutableStateFlow(AgroQuizQuestion.QUIZ_POOL.first())
+    override val currentQuizQuestion: StateFlow<AgroQuizQuestion> = _currentQuizQuestion.asStateFlow()
+
+    private val _isQuizCompletedToday = MutableStateFlow(false)
+    override val isQuizCompletedToday: StateFlow<Boolean> = _isQuizCompletedToday.asStateFlow()
+
+    private val _selectedQuizOptionIndex = MutableStateFlow(-1)
+    override val selectedQuizOptionIndex: StateFlow<Int> = _selectedQuizOptionIndex.asStateFlow()
+
+    private val _isQuizAnswerCorrect = MutableStateFlow<Boolean?>(null)
+    override val isQuizAnswerCorrect: StateFlow<Boolean?> = _isQuizAnswerCorrect.asStateFlow()
+
     init {
+        // ALWAYS force unanswered quiz state on repository initialization
+        resetQuizState()
+
         // Load initial state from DataStore if available
         dataStore?.let { store ->
             scope.launch {
                 runCatching {
-                    val level = store.userLevelFlow.first()
                     val xp = store.currentXpFlow.first()
                     val source = store.plantSourceFlow.first()
                     val streak = store.streakDaysFlow.first()
                     val claimedIds = store.claimedQuestIdsFlow.first()
                     val savedJournal = store.journalNotesFlow.first()
                     val savedTelemetry = store.telemetryDataFlow.first()
+                    val savedLastResetDate = store.lastResetDateFlow.first()
 
+                    memoryLastResetDate = savedLastResetDate
                     _plantSource.value = source
                     if (savedTelemetry != null) {
                         _telemetryData.value = savedTelemetry
@@ -136,8 +160,15 @@ class AgriQuestRepositoryImpl(
                     if (savedJournal.isNotEmpty()) {
                         _plantAvatar.value = _plantAvatar.value.copy(journalEntries = savedJournal)
                     }
+                    _streakDays.value = streak
                     updateAvatarProgression(xp, streak)
                     updateQuestsWithClaimed(claimedIds)
+
+                    // Midnight date check & quest reset on repository startup
+                    checkAndResetMidnightQuests()
+
+                    // ALWAYS force unanswered quiz state after loading DataStore
+                    resetQuizState()
 
                     if (source == PlantSource.EMULATED_OFFLINE) {
                         startSimulationRoutine()
@@ -227,8 +258,9 @@ class AgriQuestRepositoryImpl(
         }
     }
 
-    private fun updateAvatarProgression(totalXp: Int, streakDays: Int = _plantAvatar.value.streakDays) {
+    private fun updateAvatarProgression(totalXp: Int, streakDays: Int = _streakDays.value) {
         val (levelInt, stage, maxXp) = calculateLevelAndStage(totalXp)
+        _streakDays.value = streakDays
         _plantAvatar.value = _plantAvatar.value.copy(
             level = stage.avatarLevelText,
             levelInt = levelInt,
@@ -276,6 +308,7 @@ class AgriQuestRepositoryImpl(
             currentXp = newXp,
             maxXp = newMaxXp,
             growthStage = newStage,
+            streakDays = _streakDays.value,
             speechBubble = newStage.speechBubble
         )
 
@@ -321,7 +354,53 @@ class AgriQuestRepositoryImpl(
         }
         _quests.value = newDailyQuests
         updateActiveQuest(newDailyQuests)
+        dataStore?.clearClaimedQuestIds()
         return newDailyQuests
+    }
+
+    private fun getTodayDateString(): String {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return sdf.format(Date())
+    }
+
+    private fun calculateDaysBetween(startDateString: String, endDateString: String): Long {
+        return try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val startDate = sdf.parse(startDateString)
+            val endDate = sdf.parse(endDateString)
+            if (startDate != null && endDate != null) {
+                val diffInMillies = endDate.time - startDate.time
+                diffInMillies / (1000 * 60 * 60 * 24)
+            } else {
+                0L
+            }
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    override suspend fun checkAndResetMidnightQuests(todayDateString: String?): Boolean {
+        val todayString = todayDateString ?: getTodayDateString()
+        val lastResetDate = dataStore?.lastResetDateFlow?.first() ?: memoryLastResetDate
+
+        if (lastResetDate == null) {
+            memoryLastResetDate = todayString
+            dataStore?.saveLastResetDate(todayString)
+            resetQuizState()
+            return true
+        } else if (todayString != lastResetDate) {
+            if (calculateDaysBetween(lastResetDate, todayString) > 1) {
+                resetStreak()
+            }
+            resetDailyQuests()
+            resetQuizState()
+            dataStore?.clearQuizCompletedDate()
+
+            memoryLastResetDate = todayString
+            dataStore?.saveLastResetDate(todayString)
+            return true
+        }
+        return false
     }
 
     override suspend fun setPlantSource(source: PlantSource) {
@@ -337,17 +416,20 @@ class AgriQuestRepositoryImpl(
     }
 
     override suspend fun setStreakDays(streakDays: Int) {
+        _streakDays.value = streakDays
         _plantAvatar.value = _plantAvatar.value.copy(streakDays = streakDays)
         dataStore?.saveStreakDays(streakDays)
     }
 
     override suspend fun incrementStreak() {
-        val newStreak = _plantAvatar.value.streakDays + 1
+        val newStreak = _streakDays.value + 1
+        _streakDays.value = newStreak
         _plantAvatar.value = _plantAvatar.value.copy(streakDays = newStreak)
         dataStore?.incrementStreak()
     }
 
     override suspend fun resetStreak() {
+        _streakDays.value = 0
         _plantAvatar.value = _plantAvatar.value.copy(streakDays = 0)
         dataStore?.resetStreak()
     }
@@ -478,5 +560,43 @@ class AgriQuestRepositoryImpl(
         val updatedList = listOf(entry) + current.journalEntries
         _plantAvatar.value = current.copy(journalEntries = updatedList)
         dataStore?.saveJournalEntries(updatedList)
+    }
+
+    /**
+     * Resets quiz state to clean, unanswered state (selectedQuizOptionIndex = -1, isQuizCompletedToday = false).
+     */
+    override fun resetQuizState() {
+        _selectedQuizOptionIndex.value = -1
+        _isQuizCompletedToday.value = false
+        _isQuizAnswerCorrect.value = null
+    }
+
+    /**
+     * Submits selected answer option index for the active daily quiz question.
+     */
+    override suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean {
+        val question = _currentQuizQuestion.value
+        val isCorrect = selectedOptionIndex == question.correctOptionIndex
+        _selectedQuizOptionIndex.value = selectedOptionIndex
+        _isQuizAnswerCorrect.value = isCorrect
+        _isQuizCompletedToday.value = true
+
+        if (isCorrect) {
+            addXp(question.xpReward)
+        }
+        val todayString = getTodayDateString()
+        dataStore?.saveQuizCompletedDate(todayString)
+        return isCorrect
+    }
+
+    /**
+     * Advances to next question in quiz pool and resets selected option/correctness states.
+     */
+    override fun nextQuizQuestion() {
+        val pool = AgroQuizQuestion.QUIZ_POOL
+        val currentIndex = pool.indexOf(_currentQuizQuestion.value)
+        val nextIndex = if (currentIndex != -1) (currentIndex + 1) % pool.size else 0
+        _currentQuizQuestion.value = pool[nextIndex]
+        resetQuizState()
     }
 }

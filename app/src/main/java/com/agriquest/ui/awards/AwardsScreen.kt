@@ -68,7 +68,6 @@ import com.agriquest.ui.theme.Slate900
 
 private val CreamBackground = Color(0xFFFAF6EE)
 private val DarkEmerald = Color(0xFF064E3B)
-private val EmeraldAccent = Color(0xFF047857)
 private val GoldAccent = Color(0xFFF59E0B)
 private val GoldLight = Color(0xFFFBBF24)
 
@@ -127,7 +126,7 @@ fun AwardsScreenContent(
                 // 3. Quick Stat Chips Row (3 cards)
                 QuickStatChipsRow(
                     unlockedCountText = "${uiState.unlockedAchievementsCount}/${uiState.totalAchievementsCount}",
-                    totalXpText = "${uiState.unlockedXpTotal}",
+                    totalXpText = uiState.unlockedXpTotal.toString(),
                     rankText = "#42"
                 )
 

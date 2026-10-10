@@ -2,6 +2,7 @@ package com.agriquest.domain.repository
 
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
+import com.agriquest.domain.model.AgroQuizQuestion
 import com.agriquest.domain.model.AiScanResult
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.JournalEntry
@@ -42,6 +43,18 @@ interface AgriQuestRepository {
     /** Flow of AI leaf diagnostic scan history entries. */
     val recentScans: StateFlow<List<AiScanResult>>
 
+    /** Flow of active daily quiz question. */
+    val currentQuizQuestion: StateFlow<AgroQuizQuestion>
+
+    /** Flow indicating if today's quiz has been completed. */
+    val isQuizCompletedToday: StateFlow<Boolean>
+
+    /** Flow of currently selected option index for active quiz (-1 if uncompleted). */
+    val selectedQuizOptionIndex: StateFlow<Int>
+
+    /** Flow of result correctness for selected quiz option (or null if uncompleted). */
+    val isQuizAnswerCorrect: StateFlow<Boolean?>
+
     /**
      * Increases user current XP by [amount], leveling up when [currentXp] reaches [maxXpForLevel],
      * recalculating max XP, growth stage, avatar level text, and agro speech bubble.
@@ -60,6 +73,17 @@ interface AgriQuestRepository {
      * @return the newly selected 3 daily quests.
      */
     suspend fun resetDailyQuests(): List<Quest>
+
+    /**
+     * Checks if calendar date has changed since last quest reset.
+     * If today is a new calendar day (or lastResetDate is null):
+     * - Resets and reshuffles uncompleted daily quests.
+     * - Saves today's date in DataStore.
+     * - If user missed a day (daysBetween > 1), resets care streak to 0.
+     * @param todayDateString Optional date string formatted as "YYYY-MM-DD" (used for testing/simulation).
+     * @return true if daily quests were reset for a new day, false if already reset today.
+     */
+    suspend fun checkAndResetMidnightQuests(todayDateString: String? = null): Boolean
 
     /**
      * Updates selected plant telemetry source and persists change.
@@ -132,4 +156,21 @@ interface AgriQuestRepository {
      * Adds a care log note entry to the plant journal.
      */
     suspend fun addJournalEntry(entry: JournalEntry)
+
+    /**
+     * Resets quiz state to clean, unanswered state (selectedQuizOptionIndex = -1, isQuizCompletedToday = false).
+     */
+    fun resetQuizState()
+
+    /**
+     * Submits selected answer option index for the active daily quiz question.
+     * If correct: awards +30 XP, checks for level up, marks today's quiz completed, and returns true.
+     * @return true if answer is correct, false otherwise.
+     */
+    suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean
+
+    /**
+     * Advances to next question in quiz pool and resets selected option/correctness states.
+     */
+    fun nextQuizQuestion()
 }

@@ -41,6 +41,8 @@ class AgriQuestDataStore(
         val KEY_TELEMETRY_TEMP = floatPreferencesKey("telemetry_temp")
         val KEY_TELEMETRY_HUMIDITY = floatPreferencesKey("telemetry_humidity")
         val KEY_TELEMETRY_LIGHT = floatPreferencesKey("telemetry_light")
+        val KEY_LAST_RESET_DATE = stringPreferencesKey("last_reset_date")
+        val KEY_QUIZ_COMPLETED_DATE = stringPreferencesKey("quiz_completed_date")
     }
 
     val userLevelFlow: Flow<Int> = dataStore.data.map { preferences ->
@@ -57,6 +59,14 @@ class AgriQuestDataStore(
 
     val claimedQuestIdsFlow: Flow<Set<String>> = dataStore.data.map { preferences ->
         preferences[KEY_CLAIMED_QUEST_IDS] ?: emptySet()
+    }
+
+    val lastResetDateFlow: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[KEY_LAST_RESET_DATE]
+    }
+
+    val quizCompletedDateFlow: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[KEY_QUIZ_COMPLETED_DATE]
     }
 
     val streakDaysFlow: Flow<Int> = dataStore.data.map { preferences ->
@@ -158,6 +168,30 @@ class AgriQuestDataStore(
             preferences[KEY_TELEMETRY_TEMP] = telemetry.airTemperature
             preferences[KEY_TELEMETRY_HUMIDITY] = telemetry.relativeHumidity
             preferences[KEY_TELEMETRY_LIGHT] = telemetry.lightIntensity
+        }
+    }
+
+    suspend fun saveLastResetDate(dateString: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_LAST_RESET_DATE] = dateString
+        }
+    }
+
+    suspend fun clearClaimedQuestIds() {
+        dataStore.edit { preferences ->
+            preferences.remove(KEY_CLAIMED_QUEST_IDS)
+        }
+    }
+
+    suspend fun saveQuizCompletedDate(dateString: String) {
+        dataStore.edit { preferences ->
+            preferences[KEY_QUIZ_COMPLETED_DATE] = dateString
+        }
+    }
+
+    suspend fun clearQuizCompletedDate() {
+        dataStore.edit { preferences ->
+            preferences.remove(KEY_QUIZ_COMPLETED_DATE)
         }
     }
 }

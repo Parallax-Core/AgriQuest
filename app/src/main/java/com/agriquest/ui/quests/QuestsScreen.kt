@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,7 +55,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agriquest.domain.model.Quest
 import com.agriquest.ui.components.AgriQuestBottomNav
+import com.agriquest.ui.components.DailyQuizCard
 import com.agriquest.ui.state.AgriQuestUiState
+import kotlinx.coroutines.launch
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.theme.Amber100
 import com.agriquest.ui.theme.Amber600
@@ -87,6 +90,7 @@ fun QuestsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     // Listen for notification side effects (e.g. quest completed, +XP awarded, level-up)
     LaunchedEffect(viewModel) {
@@ -103,6 +107,10 @@ fun QuestsScreen(
         onTabSelected = onTabSelected,
         onCompleteQuest = { questId -> viewModel.claimQuest(questId) },
         onSimulateNextDay = { viewModel.simulateNextDay() },
+        onAnswerQuiz = { optionIndex ->
+            coroutineScope.launch { viewModel.submitQuizAnswer(optionIndex) }
+        },
+        onNextQuizQuestion = { viewModel.nextQuizQuestion() },
         snackbarHostState = snackbarHostState
     )
 }
@@ -115,6 +123,8 @@ fun QuestsScreenContent(
     onTabSelected: (Int) -> Unit = {},
     onCompleteQuest: (String) -> Unit = {},
     onSimulateNextDay: () -> Unit = {},
+    onAnswerQuiz: (Int) -> Unit = {},
+    onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     val dailyQuestsList = uiState.quests
@@ -206,7 +216,17 @@ fun QuestsScreenContent(
                         )
                     }
 
-                    // 4. Plant Care Quests Section Title
+                    // 4. Daily Agro-Quiz Section
+                    DailyQuizCard(
+                        question = uiState.currentQuizQuestion,
+                        isQuizCompletedToday = uiState.isQuizCompletedToday,
+                        selectedOptionIndex = uiState.selectedQuizOptionIndex,
+                        isAnswerCorrect = uiState.isQuizAnswerCorrect,
+                        onAnswerSelected = onAnswerQuiz,
+                        onNextQuestion = onNextQuizQuestion
+                    )
+
+                    // 5. Plant Care Quests Section Title
                     Text(
                         text = "Plant Care Quests",
                         style = MaterialTheme.typography.titleMedium.copy(

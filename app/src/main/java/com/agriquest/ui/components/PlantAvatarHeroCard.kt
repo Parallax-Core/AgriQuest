@@ -113,7 +113,7 @@ fun PlantAvatarHeroCard(
                     }
                 }
 
-                // Glowing Care Streak Badge Chip ("4 / 7 Days 🔥")
+                // Glowing Care Streak Badge Chip ("$streakDays / $targetStreakDays Days 🔥")
                 CareStreakBadge(
                     streakDays = plant.streakDays,
                     targetStreakDays = plant.targetStreakDays

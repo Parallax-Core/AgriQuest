@@ -86,11 +86,11 @@ import com.agriquest.ui.theme.PureWhite
 import com.agriquest.ui.theme.Slate100
 import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate500
-import com.agriquest.ui.theme.Slate600
 import com.agriquest.ui.theme.Slate700
 import com.agriquest.ui.theme.Slate900
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import kotlinx.coroutines.delay
+import java.util.Locale
 
 /**
  * AI Agro-Assistant Diagnostics Screen for AgriQuest Mobile.
@@ -520,15 +520,13 @@ private fun IotConditionsSummaryCard(
                         modifier = Modifier.weight(1f),
                         label = "Soil Moisture",
                         value = "${telemetry.soilMoisture.toInt()}%",
-                        isWarning = false,
-                        statusSymbol = "✓"
+                        isWarning = false
                     )
                     IotConditionTile(
                         modifier = Modifier.weight(1f),
                         label = "Temperature",
                         value = "${telemetry.airTemperature.toInt()}°C",
-                        isWarning = false,
-                        statusSymbol = "✓"
+                        isWarning = false
                     )
                 }
 
@@ -542,16 +540,14 @@ private fun IotConditionsSummaryCard(
                         modifier = Modifier.weight(1f),
                         label = "Humidity",
                         value = "${telemetry.relativeHumidity.toInt()}%",
-                        isWarning = true,
-                        statusSymbol = "⚠"
+                        isWarning = true
                     )
-                    val lightKlux = String.format("%.1f", telemetry.lightIntensity / 1000f)
+                    val lightKlux = String.format(Locale.US, "%.1f", telemetry.lightIntensity / 1000f)
                     IotConditionTile(
                         modifier = Modifier.weight(1f),
                         label = "Light",
                         value = "$lightKlux klux",
-                        isWarning = false,
-                        statusSymbol = "✓"
+                        isWarning = false
                     )
                 }
             }
@@ -567,8 +563,7 @@ private fun IotConditionTile(
     modifier: Modifier = Modifier,
     label: String,
     value: String,
-    isWarning: Boolean,
-    statusSymbol: String
+    isWarning: Boolean
 ) {
     Surface(
         modifier = modifier,

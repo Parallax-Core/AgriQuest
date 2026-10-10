@@ -2,6 +2,7 @@ package com.agriquest.ui.state
 
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
+import com.agriquest.domain.model.AgroQuizQuestion
 import com.agriquest.domain.model.AiScanResult
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.JournalEntry
@@ -26,6 +27,10 @@ data class AgriQuestUiState(
     val connection: ConnectionState = ConnectionState(),
     val actuator: ActuatorState = ActuatorState(),
     val recentScans: List<AiScanResult> = AiScanResult.DEFAULT_SCANS,
+    val currentQuizQuestion: AgroQuizQuestion = AgroQuizQuestion.QUIZ_POOL.first(),
+    val isQuizCompletedToday: Boolean = false,
+    val selectedQuizOptionIndex: Int = -1,
+    val isQuizAnswerCorrect: Boolean? = null,
     val diagnosticResult: String? = null,
     val isLoading: Boolean = false
 ) {
@@ -48,6 +53,14 @@ data class AgriQuestUiState(
     /** Exposes plant day count (e.g. Day 47). */
     val plantDayCount: Int
         get() = plant.dayCount
+
+    /** Exposes care streak days count (e.g. 0). */
+    val streakDays: Int
+        get() = plant.streakDays
+
+    /** Exposes target care streak days count (e.g. 7). */
+    val targetStreakDays: Int
+        get() = plant.targetStreakDays
 
     /** Exposes care log journal entries list. */
     val journalEntries: List<JournalEntry>

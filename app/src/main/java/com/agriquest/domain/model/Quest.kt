@@ -22,7 +22,7 @@ data class Quest(
     val xpReward: Int = 50,
     val subtext: String = "Keep soil moisture above 60%.",
     val progressText: String = "68% Moisture Goal",
-    val subtextBadge: String = "Unlock Progress: 4/7 Days to AI Diagnostic",
+    val subtextBadge: String = "Unlock Progress: 0/7 Days to AI Diagnostic",
     val isClaimed: Boolean = false,
     val isClaimable: Boolean = true
 ) {
