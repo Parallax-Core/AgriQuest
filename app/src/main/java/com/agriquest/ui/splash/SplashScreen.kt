@@ -88,7 +88,8 @@ fun SplashScreen(
                 modifier = Modifier
                     .fillMaxWidth(0.95f)
                     .widthIn(max = 380.dp)
-                    .padding(top = 40.dp),
+                    .padding(top = 40.dp)
+                    .scale(4f),
                 contentScale = ContentScale.Fit
             )
 
