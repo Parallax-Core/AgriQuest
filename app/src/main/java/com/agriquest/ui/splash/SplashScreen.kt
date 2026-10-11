@@ -8,25 +8,17 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +29,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,13 +37,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agriquest.R
 import com.agriquest.ui.theme.AgriQuestTheme
-import com.agriquest.ui.theme.PureWhite
 
 /**
  * Splash Screen & Start Screen for AgriQuest Mobile.
  *
- * Renders full-screen background image `splash_bg.png`, centered logo `aqlogo.png`,
- * and dark forest green pixel-art rounded start button ("START GAME" / "TAP TO START")
+ * Renders full-screen background image `start_bg.png`, centered logo `aqlogo.png`,
+ * and clickable pixel-art play button `play_btn.png`
  * matching reference image `start screen.png`.
  */
 @Composable
@@ -64,7 +56,7 @@ fun SplashScreen(
     ) {
         // 1. Full-Screen Background Image
         Image(
-            painter = painterResource(id = R.drawable.splash_bg),
+            painter = painterResource(id = R.drawable.start_bg),
             contentDescription = "Splash Background",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
@@ -89,11 +81,11 @@ fun SplashScreen(
                     .fillMaxWidth(0.95f)
                     .widthIn(max = 380.dp)
                     .padding(top = 40.dp)
-                    .scale(4f),
+                    .scale(3.5f),
                 contentScale = ContentScale.Fit
             )
 
-            // Bottom Section: Dark Forest Green Pixel Art Start Button
+            // Bottom Section: Animated Play Button
             val infiniteTransition = rememberInfiniteTransition(label = "pulse")
             val pulseScale by infiniteTransition.animateFloat(
                 initialValue = 0.98f,
@@ -112,44 +104,20 @@ fun SplashScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Dark Forest Green Pixel Art Rounded Start Button
-                Button(
-                    onClick = onStartGame,
+                Image(
+                    painter = painterResource(id = R.drawable.play_btn),
+                    contentDescription = "Start game",
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(60.dp)
+                        .fillMaxWidth(0.6f)
+                        .height(70.dp)
                         .scale(pulseScale)
-                        .border(3.dp, Color(0xFF15803D), RoundedCornerShape(20.dp)),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF064E3B),
-                        contentColor = PureWhite
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = "Start",
-                            tint = Color(0xFF4ADE80),
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "START GAME",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 20.sp,
-                                letterSpacing = 2.sp,
-                                color = PureWhite
-                            )
-                        )
-                    }
-                }
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "Start game",
+                            onClick = onStartGame
+                        ),
+                    contentScale = ContentScale.Fit
+                )
 
                 // Subtitle / Prompt Tag
                 Box(
