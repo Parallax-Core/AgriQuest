@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.WaterDrop
+import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,15 +75,7 @@ import com.agriquest.ui.theme.Slate600
 import com.agriquest.ui.theme.Slate900
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 
-/**
- * Daily Quests Screen for AgriQuest Mobile.
- *
- * Displays:
- * 1. Clean serif typography header with cream background.
- * 2. Available XP Gold/Amber banner ("Available Today +225 XP").
- * 3. Plant Care Quests section with 3 specific quest cards ("Prune Lower Leaves", "Deep Watering Session", "Stake the Main Stem").
- * 4. "Mark Complete" action button that completes the quest, awards XP, checks for level up, persists state, and emits notifications.
- */
+
 @Composable
 fun QuestsScreen(
     modifier: Modifier = Modifier,
@@ -127,13 +122,10 @@ fun QuestsScreenContent(
     onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
-    val dailyQuestsList = uiState.quests
-    val totalXpToday = dailyQuestsList.sumOf { it.xpReward }
-
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = Color(0xFFFAF6EE),
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        containerColor = Color(0xFFFFF9E9),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             AgriQuestBottomNav(
                 selectedTab = selectedTab,
@@ -143,374 +135,188 @@ fun QuestsScreenContent(
             )
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color(0xFFFAF6EE)),
-            contentAlignment = Alignment.TopCenter
-        ) {
+        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 430.dp)
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.widthIn(max = 430.dp).fillMaxWidth()
+                    .verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // 1. Clean Serif Typography Header on Cream Background
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = "DAILY",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            letterSpacing = 2.sp,
-                            color = Color(0xFF8B7E66)
-                        )
-                    )
-                    Text(
-                        text = "Quests",
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 32.sp,
-                            color = Slate900
-                        )
-                    )
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    // 2. Gold/Amber Gradient Available XP Banner
-                    AvailableXpBanner(totalXpAvailable = totalXpToday)
-
-                    // 3. Prominent "Simulate Next Day 🌅 (Reset Quests)" Action Button
-                    Button(
-                        onClick = onSimulateNextDay,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFEF3C7)
-                        ),
-                        border = BorderStroke(1.5.dp, Color(0xFFF59E0B)),
-                        shape = RoundedCornerShape(16.dp),
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Text(
-                            text = "Simulate Next Day 🌅 (Reset Quests)",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = Color(0xFFB45309)
-                            )
-                        )
-                    }
-
-                    // 4. Daily Agro-Quiz Section
-                    DailyQuizCard(
-                        question = uiState.currentQuizQuestion,
-                        isQuizCompletedToday = uiState.isQuizCompletedToday,
-                        selectedOptionIndex = uiState.selectedQuizOptionIndex,
-                        isAnswerCorrect = uiState.isQuizAnswerCorrect,
-                        onAnswerSelected = onAnswerQuiz,
-                        onNextQuestion = onNextQuizQuestion
-                    )
-
-                    // 5. Plant Care Quests Section Title
-                    Text(
-                        text = "Plant Care Quests",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = Slate900
-                        )
-                    )
-
-                    // 5. Render Quest Cards
-                    dailyQuestsList.forEach { quest ->
-                        PlantCareQuestCard(
-                            quest = quest,
-                            onCompleteQuest = onCompleteQuest
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                }
-            }
-        }
-    }
-}
-
-/**
- * Gold / Amber Gradient Banner displaying available daily XP with trophy icon.
- */
-@Composable
-private fun AvailableXpBanner(
-    totalXpAvailable: Int = 225
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFFF59E0B),
-                            Color(0xFFD97706)
-                        )
-                    )
-                )
-                .padding(20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = "Available Today +${totalXpAvailable} XP",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = PureWhite
-                        )
-                    )
-                    Text(
-                        text = "Complete all 3 quests",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 13.sp,
-                            color = PureWhite.copy(alpha = 0.88f)
-                        )
-                    )
-                }
-
-                // Star Trophy Icon Badge
-                Surface(
-                    shape = CircleShape,
-                    color = PureWhite.copy(alpha = 0.22f),
-                    modifier = Modifier.size(52.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.EmojiEvents,
-                            contentDescription = "Star Trophy",
-                            tint = PureWhite,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Individual Plant Care Quest Card with difficulty pill, reward badge, subtext, progress bar, and complete button.
- */
-@Composable
-private fun PlantCareQuestCard(
-    quest: Quest,
-    onCompleteQuest: (String) -> Unit
-) {
-    val isCompletedOrClaimed = quest.isClaimed || quest.isCompleted
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        border = BorderStroke(1.dp, Slate200),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Difficulty Pill & Reward Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                AvailableXpBanner(uiState)
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Difficulty Pill
-                    val isEasy = quest.difficulty.equals("Easy", ignoreCase = true)
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isEasy) Emerald100 else Amber100
-                    ) {
-                        Text(
-                            text = quest.difficulty,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = if (isEasy) Emerald700 else Amber600
-                            ),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "•",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = Slate500,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-
-                    // XP Reward Text
-                    Text(
-                        text = quest.xpRewardText,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 13.sp,
-                            color = Emerald700
-                        )
-                    )
-                }
-            }
-
-            // Quest Title
-            Text(
-                text = quest.title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                    color = Slate900
-                )
-            )
-
-            // Quest Subtext Details
-            if (quest.subtext.isNotEmpty()) {
-                Text(
-                    text = quest.subtext,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = Slate600,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
-                )
-            }
-
-            // Progress Bar Section
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Progress",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Slate500,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 11.sp
-                        )
-                    )
-                    Text(
-                        text = if (isCompletedOrClaimed && quest.progressText.contains("Goal")) "Goal Achieved ✓" else quest.progressText,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = if (isCompletedOrClaimed) Emerald700 else Slate900,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    )
-                }
-
-                val targetProgress = if (isCompletedOrClaimed) 1.0f else quest.progress.coerceIn(0f, 1f)
-                LinearProgressIndicator(
-                    progress = { targetProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-                    color = Emerald600,
-                    trackColor = Emerald100
-                )
-            }
-
-            Spacer(modifier = Modifier.height(2.dp))
-
-            // Action Button: "Mark Complete" or "Claimed ✓"
-            if (quest.isClaimed) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Emerald50,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .border(1.dp, Emerald100, RoundedCornerShape(12.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                    QuestText("◎ Plant Care Quests", pixel = true, size = 14)
+                    Surface(
+                        color = Color(0xFFE3EBB0), shape = RoundedCornerShape(3.dp),
+                        border = BorderStroke(1.dp, Color(0xFFA9B666))
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
-                            contentDescription = "Claimed",
-                            tint = Emerald600,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                        Text(
-                            text = "Claimed ✓",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                color = Emerald700
-                            )
+                        QuestText(
+                            "${uiState.quests.count { it.isClaimed }}/${uiState.quests.size} Done",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            color = Color(0xFF32651D), size = 11
                         )
                     }
                 }
-            } else {
-                Button(
-                    onClick = { onCompleteQuest(quest.id) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Emerald600),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                ) {
-                    Text(
-                        text = "Mark Complete",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = PureWhite
-                        )
-                    )
+                uiState.quests.forEach { quest -> PlantCareQuestCard(quest, onCompleteQuest) }
+                DailyQuizCard(
+                    question = uiState.currentQuizQuestion,
+                    isQuizCompletedToday = uiState.isQuizCompletedToday,
+                    selectedOptionIndex = uiState.selectedQuizOptionIndex,
+                    isAnswerCorrect = uiState.isQuizAnswerCorrect,
+                    onAnswerSelected = onAnswerQuiz,
+                    onNextQuestion = onNextQuizQuestion
+                )
+                GreenThumbPanel(uiState)
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onSimulateNextDay,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, Color(0xFFC9A86A))
+                ) { QuestText("Simulate Next Day", size = 12) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuestText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color(0xFF68451F),
+    size: Int = 12,
+    pixel: Boolean = false,
+    weight: FontWeight = FontWeight.Bold
+) {
+    Text(
+        text = text, modifier = modifier, color = color,
+        fontFamily = if (pixel) com.agriquest.ui.theme.SilkscreenFontFamily else com.agriquest.ui.theme.InterFontFamily,
+        fontWeight = weight, fontSize = size.sp, lineHeight = (size + 5).sp
+    )
+}
+
+@Composable
+private fun QuestProgress(progress: Float, color: Color, track: Color, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().height(8.dp).background(track, RoundedCornerShape(1.dp))
+        .border(1.dp, Color(0xFFC9A86A), RoundedCornerShape(1.dp))) {
+        if (progress > 0f) {
+            Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(8.dp).background(color))
+        }
+    }
+}
+
+@Composable
+private fun AvailableXpBanner(uiState: AgriQuestUiState) {
+    Card(
+        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFDF6D)),
+        border = BorderStroke(1.5.dp, Color(0xFFE3A32C))
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                QuestText("★ Total XP Today", pixel = true, size = 16)
+                Surface(color = Color(0xFFFFF5D9), shape = CircleShape,
+                    border = BorderStroke(1.dp, Color(0xFFE3A32C))) {
+                    QuestText("${uiState.streakDays}-day streak",
+                        Modifier.padding(horizontal = 10.dp, vertical = 4.dp), size = 10)
+                }
+            }
+            QuestText("+${uiState.quests.sumOf { it.xpReward }} XP", pixel = true, size = 28)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                QuestText("Level ${uiState.plant.levelInt}", size = 11, weight = FontWeight.SemiBold)
+                QuestText("${uiState.plant.currentXp} / ${uiState.plant.maxXp} XP", size = 11)
+            }
+            QuestProgress(uiState.plant.xpProgress, Color(0xFF649B32), Color(0xFFF3E0A0))
+        }
+    }
+}
+
+@Composable
+private fun PlantCareQuestCard(quest: Quest, onCompleteQuest: (String) -> Unit) {
+    val done = quest.isClaimed
+    val icon = when {
+        quest.id.contains("water") || quest.id.contains("thirst") -> Icons.Rounded.WaterDrop
+        quest.id.contains("prune") -> Icons.Rounded.ContentCut
+        else -> Icons.Rounded.Search
+    }
+    val iconColor = when {
+        quest.id.contains("water") || quest.id.contains("thirst") -> Color(0xFF2F87AE)
+        quest.id.contains("prune") -> Color(0xFF8B5237)
+        else -> Color(0xFF32651D)
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
+        border = BorderStroke(2.dp, Color(0xFFC9A86A))
+    ) {
+        Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Surface(
+                modifier = Modifier.size(40.dp), shape = RoundedCornerShape(3.dp),
+                color = iconColor.copy(alpha = 0.12f), border = BorderStroke(1.dp, Color(0xFFC9A86A))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Top) {
+                    QuestText(quest.title, Modifier.weight(1f), color = Color(0xFF7A5A30), size = 14, weight = FontWeight.Bold)
+                    Surface(color = Color(0xFFFFDF6D), shape = RoundedCornerShape(3.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE3A32C))) {
+                        QuestText(quest.xpRewardText, Modifier.padding(horizontal = 10.dp, vertical = 2.dp), size = 10)
+                    }
+                }
+                QuestText(quest.subtext, color = Color(0xFF7A5A30), size = 12, weight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuestProgress(if (done) 1f else quest.progress,
+                        if (done) Color(0xFF649B32) else Color(0xFFE2A72B),
+                        Color(0xFFF3E0A0), Modifier.weight(1f))
+                    QuestText(quest.progressText, size = 9, color = Color(0xFF32651D))
+                }
+                if (done) {
+                    Surface(modifier = Modifier.align(Alignment.End).height(22.4.dp),
+                        color = Color(0xFFE3EBB0), shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFA9B666))) {
+                        Box(Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
+                            QuestText("✓ Completed", color = Color(0xFF32651D), size = 11)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onCompleteQuest(quest.id) },
+                        modifier = Modifier.align(Alignment.End).height(32.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF193F4E)),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+                    ) { QuestText("Mark Complete", color = Color(0xFFFFF5D9), size = 11) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GreenThumbPanel(uiState: AgriQuestUiState) {
+    val target = uiState.targetStreakDays.coerceAtLeast(1)
+    val days = uiState.streakDays.coerceIn(0, target)
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF193F4E)),
+        border = BorderStroke(1.dp, Color(0xFFC9A86A))) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                QuestText("★ Green Thumb", color = Color(0xFFFFDF6D), pixel = true, size = 12)
+                QuestText("$days / $target days", color = Color(0xFFFFF5D9), size = 11)
+            }
+            QuestText("Complete all daily quests $target days in a row.",
+                color = Color(0xFFADC3C8), size = 11, weight = FontWeight.SemiBold)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(target) { index ->
+                    Box(Modifier.weight(1f).height(9.dp).background(
+                        if (index < days) Color(0xFFFFDF6D) else Color(0xFF345C69), RoundedCornerShape(1.dp)))
                 }
             }
         }
@@ -520,7 +326,5 @@ private fun PlantCareQuestCard(
 @Preview(showBackground = true, device = "spec:width=411dp,height=891dp")
 @Composable
 fun QuestsScreenPreview() {
-    AgriQuestTheme {
-        QuestsScreenContent()
-    }
+    AgriQuestTheme { QuestsScreenContent() }
 }

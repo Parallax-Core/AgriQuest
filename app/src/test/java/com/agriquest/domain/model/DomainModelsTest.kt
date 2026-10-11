@@ -51,7 +51,7 @@ class DomainModelsTest {
         // Fruiting stage / level >= 3 -> READY_TO_HARVEST
         val state7 = AgriQuestUiState(
             telemetry = TelemetryData(soilMoisture = 68.0f, airTemperature = 24.5f),
-            plant = PlantAvatar(growthStage = PlantGrowthStage.FRUITING_HARVEST, levelInt = 3)
+            plant = PlantAvatar(growthStage = PlantGrowthStage.RIPENING, levelInt = 5)
         )
         assertTrue(state7.activeMoodles.contains(PlantMoodle.READY_TO_HARVEST))
     }
@@ -67,29 +67,25 @@ class DomainModelsTest {
 
     @Test
     fun plantGrowthStage_enumAndFromLevel_mapsCorrectly() {
-        val stage0 = PlantGrowthStage.fromLevel(0)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, stage0)
-        assertEquals("Tiny Tomato Sprout", stage0.stageTitle)
-        assertEquals("Lvl. 0 Urban Beginner", stage0.avatarLevelText)
-        assertEquals(100, stage0.maxXp)
-
-        val stage1 = PlantGrowthStage.fromLevel(1)
-        assertEquals(PlantGrowthStage.VEGETATIVE_LEAFY, stage1)
-        assertEquals("Growing Vegetative Plant", stage1.stageTitle)
-        assertEquals("Lvl. 1 Grower", stage1.avatarLevelText)
-        assertEquals(250, stage1.maxXp)
-
-        val stage2 = PlantGrowthStage.fromLevel(2)
-        assertEquals(PlantGrowthStage.FLOWERING, stage2)
-        assertEquals("Flowering Tomato Plant", stage2.stageTitle)
-        assertEquals("Lvl. 2 Master", stage2.avatarLevelText)
-        assertEquals(450, stage2.maxXp)
-
-        val stage3 = PlantGrowthStage.fromLevel(3)
-        assertEquals(PlantGrowthStage.FRUITING_HARVEST, stage3)
-        assertEquals("Vibrant Fruiting Tomato", stage3.stageTitle)
-        assertEquals("Lvl. 3 Harvest Master", stage3.avatarLevelText)
-        assertEquals(700, stage3.maxXp)
+        val stages = listOf(
+            PlantGrowthStage.GERMINATION, PlantGrowthStage.SEEDLING_SPROUT,
+            PlantGrowthStage.VEGETATIVE_LEAFY, PlantGrowthStage.FLOWERING,
+            PlantGrowthStage.FRUITING_HARVEST, PlantGrowthStage.RIPENING
+        )
+        assertEquals(stages, PlantGrowthStage.entries.toList())
+        stages.forEachIndexed { level, stage ->
+            assertEquals(stage, PlantGrowthStage.fromLevel(level))
+            assertEquals(stage, PlantGrowthStage.fromName(stage.name))
+        }
+        assertEquals(PlantGrowthStage.GERMINATION, PlantGrowthStage.fromLevel(-1))
+        assertEquals(PlantGrowthStage.RIPENING, PlantGrowthStage.fromLevel(99))
+        assertEquals(PlantGrowthStage.GERMINATION, PlantGrowthStage.fromName(null))
+        val boundaries = listOf(0, 50, 100, 250, 450, 700)
+        boundaries.forEachIndexed { index, xp ->
+            assertEquals(stages[index], PlantGrowthStage.fromXp(xp))
+            if (index > 0) assertEquals(stages[index - 1], PlantGrowthStage.fromXp(xp - 1))
+        }
+        assertEquals(PlantGrowthStage.RIPENING, PlantGrowthStage.fromXp(2000))
     }
 
     @Test
@@ -99,9 +95,9 @@ class DomainModelsTest {
         assertEquals("Lvl. 0 Urban Beginner", plant.level)
         assertEquals(0, plant.levelInt)
         assertEquals(0, plant.currentXp)
-        assertEquals(100, plant.maxXp)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, plant.growthStage)
-        assertEquals("0/100 XP", plant.xpText)
+        assertEquals(50, plant.maxXp)
+        assertEquals(PlantGrowthStage.GERMINATION, plant.growthStage)
+        assertEquals("0/50 XP", plant.xpText)
         assertEquals("Vibrant & Healthy", plant.statusTag)
         assertEquals("0/7", plant.streakText)
         assertEquals(0.0f, plant.xpProgress, 0.01f)

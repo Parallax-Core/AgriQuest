@@ -45,25 +45,27 @@ import com.agriquest.ui.theme.Slate900
 @Composable
 fun PlantStagesCard(
     modifier: Modifier = Modifier,
-    currentStage: PlantGrowthStage = PlantGrowthStage.SEEDLING_SPROUT,
+    currentStage: PlantGrowthStage = PlantGrowthStage.GERMINATION,
     onViewMoreClick: () -> Unit = {}
 ) {
     val activeStageIndex = when (currentStage) {
+        PlantGrowthStage.GERMINATION -> 0
         PlantGrowthStage.SEEDLING_SPROUT -> 1 // 2 Seedling (index 1)
         PlantGrowthStage.VEGETATIVE_LEAFY -> 2 // 3 Vegetative (index 2)
         PlantGrowthStage.FLOWERING -> 3 // 4 Flowering (index 3)
         PlantGrowthStage.FRUITING_HARVEST -> 4 // 5 Fruiting (index 4)
+        PlantGrowthStage.RIPENING -> 5
     }
 
     val stageImages = listOf(
-        R.drawable.germination,
-        R.drawable.seedling,
-        R.drawable.vegetative,
-        R.drawable.flowering,
-        R.drawable.fruiting,
-        R.drawable.harvest
+        R.drawable.tomato_stages_germination,
+        R.drawable.tomato_stages_seedling,
+        R.drawable.tomato_stages_vegetative,
+        R.drawable.tomato_stages_flowering,
+        R.drawable.tomato_stages_fruit,
+        R.drawable.tomato_stages_ripening
     )
-    val stageNames = listOf("Germination", "Seedling", "Vegetative", "Flowering", "Fruiting", "Harvest")
+    val stageNames = listOf("Germination", "Seedling", "Vegetative", "Flowering", "Fruiting", "Ripening")
 
     Card(
         modifier = modifier.fillMaxWidth(),

@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agriquest.domain.model.AgroQuizQuestion
+import com.agriquest.ui.theme.InterFontFamily
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.theme.Amber100
 import com.agriquest.ui.theme.Amber600
@@ -57,16 +58,7 @@ val Red100 = Color(0xFFFEE2E2)
 val Red600 = Color(0xFFDC2626)
 val Red700 = Color(0xFFB91C1C)
 
-/**
- * Daily Agro-Quiz UI Card Component for AgriQuest Mobile.
- *
- * Displays:
- * 1. Title "🧠 Daily Agro-Quiz" with XP reward badge.
- * 2. Active agriculture question text.
- * 3. 4 clickable option buttons.
- * 4. Correct/Incorrect answer state with explanation and gold trophy completed badge.
- * 5. "Next Question 🔄" shuffle option for testing.
- */
+
 @Composable
 fun DailyQuizCard(
     modifier: Modifier = Modifier,
@@ -81,16 +73,16 @@ fun DailyQuizCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        border = BorderStroke(1.dp, Slate200),
+        shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
+        border = BorderStroke(2.dp, Color(0xFFC9A86A)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Header Row: Title & XP Reward Pill
             Row(
@@ -105,22 +97,24 @@ fun DailyQuizCard(
                     Text(
                         text = "🧠 Daily Agro-Quiz",
                         style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = InterFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = Slate900
+                            fontSize = 14.sp,
+                            color = Color(0xFF7A5A30)
                         )
                     )
                 }
 
                 // Reward Badge
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(4.dp),
                     color = Emerald100
                 ) {
                     Text(
                         text = "+${question.xpReward} XP",
                         style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = InterFontFamily,
+                            fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = Emerald700
                         ),
@@ -133,7 +127,7 @@ fun DailyQuizCard(
             if (hasAnswered) {
                 if (isAnswerCorrect == true) {
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = Amber100,
                         border = BorderStroke(1.dp, Amber600.copy(alpha = 0.3f)),
                         modifier = Modifier.fillMaxWidth()
@@ -164,6 +158,7 @@ fun DailyQuizCard(
                                 Text(
                                     text = "🎉 Correct! +30 XP Awarded!",
                                     style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = InterFontFamily,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = Amber600
@@ -172,6 +167,8 @@ fun DailyQuizCard(
                                 Text(
                                     text = "Great job keeping your plant knowledge sharp!",
                                     style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = InterFontFamily,
+                                        fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp,
                                         color = Slate600
                                     )
@@ -181,7 +178,7 @@ fun DailyQuizCard(
                     }
                 } else if (isAnswerCorrect == false) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = Red100,
                         border = BorderStroke(1.dp, Red600),
                         modifier = Modifier.fillMaxWidth()
@@ -189,6 +186,7 @@ fun DailyQuizCard(
                         Text(
                             text = "❌ Incorrect! Review explanation below.",
                             style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = InterFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
                                 color = Red700
@@ -203,10 +201,11 @@ fun DailyQuizCard(
             Text(
                 text = question.questionText,
                 style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = InterFontFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = Slate900,
-                    lineHeight = 22.sp
+                    fontSize = 14.sp,
+                    color = Color(0xFF7A5A30),
+                    lineHeight = 20.sp
                 )
             )
 
@@ -222,23 +221,23 @@ fun DailyQuizCard(
                     val backgroundColor = when {
                         hasAnswered && isCorrectOption -> Emerald100
                         hasAnswered && isSelected -> Red100
-                        else -> PureWhite
+                        else -> Color(0xFFFFFAEB)
                     }
 
                     val borderColor = when {
                         hasAnswered && isCorrectOption -> Emerald600
                         hasAnswered && isSelected -> Red600
-                        else -> Slate200
+                        else -> Color(0xFFC9A86A)
                     }
 
                     val textColor = when {
                         hasAnswered && isCorrectOption -> Emerald700
                         hasAnswered && isSelected -> Red700
-                        else -> Slate800
+                        else -> Color(0xFF7A5A30)
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = backgroundColor,
                         border = BorderStroke(1.5.dp, borderColor),
                         modifier = Modifier
@@ -268,6 +267,7 @@ fun DailyQuizCard(
                                         Text(
                                             text = ('A' + index).toString(),
                                             style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = InterFontFamily,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 12.sp,
                                                 color = if (hasAnswered && (isCorrectOption || isSelected)) PureWhite else Slate600
@@ -279,8 +279,9 @@ fun DailyQuizCard(
                                 Text(
                                     text = optionText,
                                     style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = if (hasAnswered && (isCorrectOption || isSelected)) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 14.sp,
+                            fontFamily = InterFontFamily,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
                                         color = textColor
                                     )
                                 )
@@ -311,7 +312,7 @@ fun DailyQuizCard(
             // Explanation Section (shown if answered)
             if (hasAnswered) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(4.dp),
                     color = Emerald50,
                     border = BorderStroke(1.dp, Emerald100),
                     modifier = Modifier.fillMaxWidth()
@@ -325,6 +326,7 @@ fun DailyQuizCard(
                         Text(
                             text = "💡 Explanation & Agro-Insight",
                             style = MaterialTheme.typography.titleSmall.copy(
+                            fontFamily = InterFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
                                 color = Emerald700
@@ -334,6 +336,8 @@ fun DailyQuizCard(
                         Text(
                             text = question.explanation,
                             style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = InterFontFamily,
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 lineHeight = 17.sp,
                                 color = Slate700
@@ -348,9 +352,9 @@ fun DailyQuizCard(
                 Button(
                     onClick = onNextQuestion,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(4.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Emerald600,
+                        containerColor = Color(0xFF193F4E),
                         contentColor = PureWhite
                     ),
                     contentPadding = PaddingValues(vertical = 12.dp)
@@ -365,6 +369,7 @@ fun DailyQuizCard(
                     Text(
                         text = "Answer Another Question 🔄",
                         style = MaterialTheme.typography.titleSmall.copy(
+                            fontFamily = InterFontFamily,
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = PureWhite
@@ -378,7 +383,7 @@ fun DailyQuizCard(
                 ) {
                     OutlinedButton(
                         onClick = onNextQuestion,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(4.dp),
                         border = BorderStroke(1.dp, Slate300),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
@@ -392,6 +397,7 @@ fun DailyQuizCard(
                         Text(
                             text = "Next Question 🔄",
                             style = MaterialTheme.typography.labelMedium.copy(
+                            fontFamily = InterFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = Slate700

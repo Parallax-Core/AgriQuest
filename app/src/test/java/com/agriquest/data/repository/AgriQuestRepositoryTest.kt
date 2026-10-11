@@ -30,8 +30,8 @@ class AgriQuestRepositoryTest {
         assertEquals("Flora", plant.name)
         assertEquals("Lvl. 0 Urban Beginner", plant.level)
         assertEquals(0, plant.currentXp)
-        assertEquals(100, plant.maxXp)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, plant.growthStage)
+        assertEquals(50, plant.maxXp)
+        assertEquals(PlantGrowthStage.GERMINATION, plant.growthStage)
         assertEquals("Vibrant & Healthy", plant.statusTag)
         assertEquals(0, plant.streakDays)
 
@@ -57,8 +57,8 @@ class AgriQuestRepositoryTest {
 
         // 1. Initial State: Level 0, 0/100 XP
         assertEquals(0, repo.plantAvatar.value.currentXp)
-        assertEquals(100, repo.plantAvatar.value.maxXp)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, repo.plantAvatar.value.growthStage)
+        assertEquals(50, repo.plantAvatar.value.maxXp)
+        assertEquals(PlantGrowthStage.GERMINATION, repo.plantAvatar.value.growthStage)
 
         // 2. Add 50 XP -> 50/100 XP, stays Level 0
         repo.addXp(50)
@@ -71,21 +71,26 @@ class AgriQuestRepositoryTest {
         assertEquals(100, repo.plantAvatar.value.currentXp)
         assertEquals(250, repo.plantAvatar.value.maxXp)
         assertEquals(PlantGrowthStage.VEGETATIVE_LEAFY, repo.plantAvatar.value.growthStage)
-        assertEquals("Lvl. 1 Grower", repo.plantAvatar.value.level)
+        assertEquals("Lvl. 2 Grower", repo.plantAvatar.value.level)
 
         // 4. Add 150 XP -> 250/450 XP, Levels up to Level 2 FLOWERING!
         repo.addXp(150)
         assertEquals(250, repo.plantAvatar.value.currentXp)
         assertEquals(450, repo.plantAvatar.value.maxXp)
         assertEquals(PlantGrowthStage.FLOWERING, repo.plantAvatar.value.growthStage)
-        assertEquals("Lvl. 2 Master", repo.plantAvatar.value.level)
+        assertEquals("Lvl. 3 Master", repo.plantAvatar.value.level)
 
         // 5. Add 200 XP -> 450/700 XP, Levels up to Level 3 FRUITING_HARVEST!
         repo.addXp(200)
         assertEquals(450, repo.plantAvatar.value.currentXp)
         assertEquals(700, repo.plantAvatar.value.maxXp)
         assertEquals(PlantGrowthStage.FRUITING_HARVEST, repo.plantAvatar.value.growthStage)
-        assertEquals("Lvl. 3 Harvest Master", repo.plantAvatar.value.level)
+        assertEquals("Lvl. 4 Fruit Grower", repo.plantAvatar.value.level)
+
+        repo.addXp(250)
+        assertEquals(PlantGrowthStage.RIPENING, repo.plantAvatar.value.growthStage)
+        assertEquals(5, repo.plantAvatar.value.levelInt)
+        assertEquals(1000, repo.plantAvatar.value.maxXp)
     }
 
     @Test

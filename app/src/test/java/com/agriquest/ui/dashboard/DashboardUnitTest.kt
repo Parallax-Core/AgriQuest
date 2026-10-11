@@ -31,8 +31,8 @@ class DashboardUnitTest {
         val plant = uiState.plant
         assertEquals("Lvl. 0 Urban Beginner", plant.level)
         assertEquals(0, plant.currentXp)
-        assertEquals(100, plant.maxXp)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, plant.growthStage)
+        assertEquals(50, plant.maxXp)
+        assertEquals(PlantGrowthStage.GERMINATION, plant.growthStage)
         assertEquals("Vibrant & Healthy", plant.statusTag)
         assertEquals(0, plant.streakDays)
         assertEquals(7, plant.targetStreakDays)

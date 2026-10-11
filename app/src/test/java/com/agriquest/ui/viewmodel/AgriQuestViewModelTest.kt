@@ -48,8 +48,8 @@ class AgriQuestViewModelTest {
         assertEquals("Flora", state.plant.name)
         assertEquals("Lvl. 0 Urban Beginner", state.plant.level)
         assertEquals(0, state.plant.currentXp)
-        assertEquals(100, state.plant.maxXp)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, state.plant.growthStage)
+        assertEquals(50, state.plant.maxXp)
+        assertEquals(PlantGrowthStage.GERMINATION, state.plant.growthStage)
         assertEquals("⚡ Thirsty Roots: Keep soil moisture above 60%", state.activeQuest.title)
         assertEquals(PlantSource.EMULATED_OFFLINE, state.plantSource)
         assertEquals("ESP32", state.connection.deviceName)
@@ -67,7 +67,7 @@ class AgriQuestViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(100, state.plant.currentXp)
         assertEquals(250, state.plant.maxXp)
-        assertEquals("Lvl. 1 Grower", state.plant.level)
+        assertEquals("Lvl. 2 Grower", state.plant.level)
         assertEquals(PlantGrowthStage.VEGETATIVE_LEAFY, state.plant.growthStage)
     }
 

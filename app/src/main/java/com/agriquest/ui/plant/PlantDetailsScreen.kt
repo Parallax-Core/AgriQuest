@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,6 +88,7 @@ import com.agriquest.ui.theme.Emerald500
 import com.agriquest.ui.theme.Emerald600
 import com.agriquest.ui.theme.Emerald700
 import com.agriquest.ui.theme.PureWhite
+import com.agriquest.ui.theme.SilkscreenFontFamily
 import com.agriquest.ui.theme.Slate100
 import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate50
@@ -97,32 +99,13 @@ import com.agriquest.ui.theme.Slate900
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import java.util.Locale
 
-/**
- * Tab selection enum for Plant Details segmented toggle control.
- */
+
 enum class PlantDetailsTab(val title: String, val icon: String) {
     STATS("Stats", "📊"),
     JOURNAL("Journal", "📖")
 }
 
-/**
- * PlantDetailsScreen for AgriQuest Mobile.
- *
- * Displays details for the selected plant (e.g. Roma Rosso 🍅):
- * - Header: "PLANT DETAILS" subtitle and "Roma Rosso 🍅" title with soft cream/slate background (`0xFFFBF9F1` / `0xFFF8FAFC`).
- * - Plant Hero Card:
- *   - Day counter pill badge: "Day 47".
- *   - Status badge: "Stage 3 - Mature" (green chip).
- *   - Plant canvas illustration (`PlantAvatarCanvas` rendering stage 3 tomato plant).
- *   - Plant Health progress bar: "Plant Health 92%" with green progress indicator, subtext "Excellent condition • 3 tomatoes ripening".
- * - Stats / Journal Toggle Buttons:
- *   - Segmented toggle control: `📊 Stats` | `📖 Journal`.
- *   - When `Stats` is selected:
- *     a) Live Readings 2x2 grid (Soil Moisture 68%, Temperature 24°C, Humidity 62%, Light 4.2 klux).
- *     b) "Moisture History" line / bar chart section at bottom ("Today", "Yesterday", "2 days ago" values).
- *   - When `Journal` is selected:
- *     - Care log notes ("Aug 12: Watered 250ml", "Aug 10: Pruned bottom branches", "Aug 5: Planted seedling").
- */
+
 @Composable
 fun PlantDetailsScreen(
     modifier: Modifier = Modifier,
@@ -296,6 +279,7 @@ fun PlantDetailsHeader(
                         Text(
                             text = title,
                             style = MaterialTheme.typography.headlineSmall.copy(
+                                fontFamily = SilkscreenFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 color = Slate900,
                                 fontSize = 22.sp
@@ -334,9 +318,9 @@ fun PlantHeroCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        border = BorderStroke(1.dp, Slate200)
+        border = BorderStroke(1.dp, Color(0xFFB68E64))
     ) {
         Column(
             modifier = Modifier
@@ -408,9 +392,9 @@ fun PlantHeroCard(
                 }
             }
 
-            // Stage 3 Plant Canvas Vector Illustration
+            // Imported plant image for the current growth stage
             PlantAvatarCanvas(
-                growthStage = PlantGrowthStage.FRUITING_HARVEST,
+                growthStage = plant.growthStage,
                 size = 145.dp
             )
 
@@ -427,6 +411,7 @@ fun PlantHeroCard(
                     Text(
                         text = "Plant Health",
                         style = MaterialTheme.typography.bodyMedium.copy(
+                            fontFamily = SilkscreenFontFamily,
                             fontWeight = FontWeight.Bold,
                             color = Slate900,
                             fontSize = 14.sp
@@ -456,6 +441,50 @@ fun PlantHeroCard(
                             .background(Emerald600, RoundedCornerShape(5.dp))
                     )
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Level ${plant.levelInt}",
+                        color = Color(0xFF573610),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "${plant.currentXp} / ${plant.maxXp} XP",
+                        color = Color(0xFF32651D),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(10.dp)
+                        .background(Color(0xFFF3E0A0), RoundedCornerShape(2.dp))
+                        .border(1.dp, Color(0xFFC9A86A), RoundedCornerShape(2.dp))
+                ) {
+                    if (plant.xpProgress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(plant.xpProgress)
+                                .height(10.dp)
+                                .background(Color(0xFFDEA92A), RoundedCornerShape(2.dp))
+                        )
+                    }
+                }
+                Text(
+                    text = plant.nextWateringInHours?.let { hours ->
+                        val wateringNote = if (hours <= 0) "Watering due now" else "Next watering in $hours h"
+                        "${plant.statusTag} · $wateringNote"
+                    } ?: "${plant.statusTag} · Next watering not scheduled",
+                    color = Color(0xFFB68147),
+                    fontStyle = FontStyle.Italic,
+                    fontSize = 11.sp
+                )
 
                 // Health Subtext Indicator
                 Row(
@@ -493,8 +522,9 @@ fun StatsJournalSegmentedControl(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Slate100,
-        shape = RoundedCornerShape(16.dp)
+        color = Color(0xFFFFF5D9),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Color(0xFFB68E64))
     ) {
         Row(
             modifier = Modifier
@@ -526,7 +556,8 @@ fun StatsJournalSegmentedControl(
                         Text(
                             text = tab.title,
                             style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                fontFamily = SilkscreenFontFamily,
+                                fontWeight = FontWeight.Bold,
                                 color = if (isSelected) Slate900 else Slate500,
                                 fontSize = 14.sp
                             )
@@ -557,6 +588,7 @@ fun StatsTabContent(
         Text(
             text = "Live Readings",
             style = MaterialTheme.typography.titleMedium.copy(
+                fontFamily = SilkscreenFontFamily,
                 fontWeight = FontWeight.Bold,
                 color = Slate900,
                 fontSize = 16.sp
@@ -588,10 +620,10 @@ fun PlantDetailsTelemetryGrid(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val moistureStateRes = if (telemetry.soilMoisture < 30.0f) {
-                R.drawable.temp_state_cold
-            } else {
-                R.drawable.temp_state_good
+            val moistureStatus = when {
+                telemetry.soilMoisture < 60f -> "Too Dry" to R.drawable.red
+                telemetry.soilMoisture > 80f -> "Too Wet" to R.drawable.red
+                else -> "Optimal" to R.drawable.green
             }
             PlantTelemetryMetricCard(
                 modifier = Modifier.weight(1f),
@@ -599,7 +631,10 @@ fun PlantDetailsTelemetryGrid(
                 reading = "${telemetry.soilMoisture.toInt()}%",
                 targetRange = "Target: 60-80%",
                 iconRes = R.drawable.soil_moisture,
-                stateChipRes = moistureStateRes
+                statusLabel = moistureStatus.first,
+                statusBackgroundRes = moistureStatus.second,
+                containerColor = Color(0xFFDBEAF2),
+                strokeColor = Color(0xFFC9A86A)
             )
 
             val tempIconRes = when {
@@ -608,11 +643,10 @@ fun PlantDetailsTelemetryGrid(
                 telemetry.airTemperature in 28.0f..30.0f -> R.drawable.temp_warm
                 else -> R.drawable.temp_good
             }
-            val tempStateRes = when {
-                telemetry.airTemperature < 15.0f -> R.drawable.temp_state_cold
-                telemetry.airTemperature > 30.0f -> R.drawable.temp_state_high
-                telemetry.airTemperature in 28.0f..30.0f -> R.drawable.temp_state_warm
-                else -> R.drawable.temp_state_good
+            val temperatureStatus = when {
+                telemetry.airTemperature < 15f -> "Too Cold" to R.drawable.blue
+                telemetry.airTemperature > 30f -> "Too Hot" to R.drawable.red
+                else -> "Ideal" to R.drawable.green
             }
             PlantTelemetryMetricCard(
                 modifier = Modifier.weight(1f),
@@ -620,7 +654,10 @@ fun PlantDetailsTelemetryGrid(
                 reading = "${telemetry.airTemperature.toInt()}°C",
                 targetRange = "Target: 21-28°C",
                 iconRes = tempIconRes,
-                stateChipRes = tempStateRes
+                statusLabel = temperatureStatus.first,
+                statusBackgroundRes = temperatureStatus.second,
+                containerColor = Color(0xFFFBE3C4),
+                strokeColor = Color(0xFFC9A86A)
             )
         }
 
@@ -628,13 +665,21 @@ fun PlantDetailsTelemetryGrid(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            val humidityStatus = when {
+                telemetry.relativeHumidity < 50f -> "Too Low" to R.drawable.red
+                telemetry.relativeHumidity > 70f -> "Too High" to R.drawable.blue
+                else -> "Good" to R.drawable.green
+            }
             PlantTelemetryMetricCard(
                 modifier = Modifier.weight(1f),
                 title = "Humidity",
                 reading = "${telemetry.relativeHumidity.toInt()}%",
                 targetRange = "Target: 50-70%",
                 iconRes = R.drawable.humidity,
-                stateChipRes = R.drawable.temp_state_good
+                statusLabel = humidityStatus.first,
+                statusBackgroundRes = humidityStatus.second,
+                containerColor = Color(0xFFDFECCB),
+                strokeColor = Color(0xFFC9A86A)
             )
 
             // Explicitly formatted "4.2 klux"
@@ -650,7 +695,10 @@ fun PlantDetailsTelemetryGrid(
                 reading = lightReading,
                 targetRange = "Target: >4.0 klux",
                 iconRes = R.drawable.light,
-                stateChipRes = R.drawable.temp_state_good
+                statusLabel = if (telemetry.lightIntensity < 4000f) "Too Low" else "Moderate",
+                statusBackgroundRes = if (telemetry.lightIntensity < 4000f) R.drawable.blue else R.drawable.green,
+                containerColor = Color(0xFFFDF0B8),
+                strokeColor = Color(0xFFC9A86A)
             )
         }
     }
@@ -662,71 +710,75 @@ fun PlantTelemetryMetricCard(
     reading: String,
     targetRange: String,
     iconRes: Int,
-    stateChipRes: Int,
-    modifier: Modifier = Modifier
+    statusLabel: String,
+    statusBackgroundRes: Int,
+    modifier: Modifier = Modifier,
+    containerColor: Color = Color(0xFFFFF5D9),
+    strokeColor: Color = Color(0xFFB68E64)
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, Slate200)
+        shape = RoundedCornerShape(6.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        border = BorderStroke(2.dp, strokeColor)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .height(88.4.dp)
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = title,
+                modifier = Modifier.size(26.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Image(
-                    painter = painterResource(id = iconRes),
-                    contentDescription = title,
-                    modifier = Modifier.size(32.dp)
-                )
-
-                Image(
-                    painter = painterResource(id = stateChipRes),
-                    contentDescription = "$title state",
-                    modifier = Modifier.height(22.dp)
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodySmall.copy(
-                        color = Slate500,
-                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF805B30),
+                        fontWeight = FontWeight.SemiBold,
                         fontSize = 12.sp
                     )
                 )
-                Text(
-                    text = reading,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        color = Slate900,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = reading,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            color = Color(0xFF573610),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
                     )
-                )
+                    Text(
+                        text = statusLabel,
+                        maxLines = 1,
+                        color = when (statusBackgroundRes) {
+                            R.drawable.green -> Color(0xFF32651D)
+                            R.drawable.red -> Color(0xFF9A4A38)
+                            R.drawable.blue -> Color(0xFF37606C)
+                            else -> Slate900
+                        },
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                }
             }
-
-            Text(
-                text = targetRange,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = Slate500,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 11.sp
-                )
-            )
         }
     }
 }
-
 /**
  * Moisture History section displaying a custom chart & daily timeline ("Today", "Yesterday", "2 days ago" values).
  */
@@ -738,9 +790,9 @@ fun MoistureHistorySection(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+        border = BorderStroke(1.dp, Color(0xFFB68E64))
     ) {
         Column(
             modifier = Modifier
@@ -766,6 +818,7 @@ fun MoistureHistorySection(
                     Text(
                         text = "Moisture History",
                         style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = SilkscreenFontFamily,
                             fontWeight = FontWeight.Bold,
                             color = Slate900,
                             fontSize = 16.sp
@@ -919,6 +972,7 @@ fun MoistureHistoryChartCanvas(
         val linePath = Path()
         points.forEachIndexed { index, pt ->
             if (index == 0) linePath.moveTo(pt.x, pt.y) else linePath.lineTo(pt.x, pt.y)
+
         }
         drawPath(
             path = linePath,
@@ -967,6 +1021,7 @@ fun JournalTabContent(
                 Text(
                     text = "Care Log Notes",
                     style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = SilkscreenFontFamily,
                         fontWeight = FontWeight.Bold,
                         color = Slate900,
                         fontSize = 16.sp
@@ -987,9 +1042,9 @@ fun JournalTabContent(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = PureWhite),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+            border = BorderStroke(1.dp, Color(0xFFB68E64))
         ) {
             Row(
                 modifier = Modifier
@@ -1057,9 +1112,9 @@ fun JournalEntryCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+        border = BorderStroke(1.dp, Color(0xFFB68E64))
     ) {
         Row(
             modifier = Modifier

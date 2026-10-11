@@ -3,7 +3,7 @@ package com.agriquest.domain.model
 /**
  * Domain enum representing plant growth stages, titles, and XP leveling thresholds.
  *
- * @param stageLevel Level index (0, 1, 2, 3+)
+ * @param stageLevel Level index (0 through 5)
  * @param maxXp XP threshold required for this stage level
  * @param stageTitle Display title of growth stage ("Tiny Tomato Sprout")
  * @param avatarLevelText Avatar level display text ("Lvl. 0 Urban Beginner")
@@ -16,47 +16,59 @@ enum class PlantGrowthStage(
     val avatarLevelText: String,
     val speechBubble: String
 ) {
-    SEEDLING_SPROUT(
+    GERMINATION(
         stageLevel = 0,
+        maxXp = 50,
+        stageTitle = "Germinating Tomato Seed",
+        avatarLevelText = "Lvl. 0 Urban Beginner",
+        speechBubble = "Let's get growing! Keep the soil moist while your seed germinates."
+    ),
+    SEEDLING_SPROUT(
+        stageLevel = 1,
         maxXp = 100,
         stageTitle = "Tiny Tomato Sprout",
-        avatarLevelText = "Lvl. 0 Urban Beginner",
+        avatarLevelText = "Lvl. 1 Seedling",
         speechBubble = "Welcome! I'm a tiny sprout getting started. Keep soil hydrated!"
     ),
     VEGETATIVE_LEAFY(
-        stageLevel = 1,
+        stageLevel = 2,
         maxXp = 250,
         stageTitle = "Growing Vegetative Plant",
-        avatarLevelText = "Lvl. 1 Grower",
+        avatarLevelText = "Lvl. 2 Grower",
         speechBubble = "Leaves are expanding nicely! Moisture and ambient light look good."
     ),
     FLOWERING(
-        stageLevel = 2,
+        stageLevel = 3,
         maxXp = 450,
         stageTitle = "Flowering Tomato Plant",
-        avatarLevelText = "Lvl. 2 Master",
+        avatarLevelText = "Lvl. 3 Master",
         speechBubble = "Flowers are blooming! Your tomato plant is thriving."
     ),
     FRUITING_HARVEST(
-        stageLevel = 3,
+        stageLevel = 4,
         maxXp = 700,
         stageTitle = "Vibrant Fruiting Tomato",
-        avatarLevelText = "Lvl. 3 Harvest Master",
-        speechBubble = "Fruits are ripening! Excellent urban farming skills."
+        avatarLevelText = "Lvl. 4 Fruit Grower",
+        speechBubble = "Tomatoes are forming! Keep caring for your growing fruit."
+    ),
+    RIPENING(
+        stageLevel = 5,
+        maxXp = 1000,
+        stageTitle = "Ripening Tomato Plant",
+        avatarLevelText = "Lvl. 5 Harvest Master",
+        speechBubble = "Your tomatoes are ripening! Get ready to harvest."
     );
 
     companion object {
         fun fromLevel(level: Int): PlantGrowthStage {
-            return when {
-                level <= 0 -> SEEDLING_SPROUT
-                level == 1 -> VEGETATIVE_LEAFY
-                level == 2 -> FLOWERING
-                else -> FRUITING_HARVEST
-            }
+            return entries[level.coerceIn(0, entries.lastIndex)]
         }
 
+        fun fromXp(totalXp: Int): PlantGrowthStage =
+            entries.firstOrNull { totalXp < it.maxXp } ?: RIPENING
+
         fun fromName(name: String?): PlantGrowthStage {
-            return entries.find { it.name == name } ?: SEEDLING_SPROUT
+            return entries.find { it.name == name } ?: GERMINATION
         }
     }
 }

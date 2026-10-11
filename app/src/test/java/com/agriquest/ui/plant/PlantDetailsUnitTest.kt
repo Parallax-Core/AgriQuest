@@ -39,7 +39,7 @@ class PlantDetailsUnitTest {
         assertEquals("Roma Rosso 🍅", plant.title)
         assertEquals(47, plant.dayCount)
         assertEquals(92, plant.healthPercent)
-        assertEquals("Stage 3 - Mature", plant.stageTag)
+        assertEquals("Stage 1 - Germinating Tomato Seed", plant.stageTag)
         assertEquals("Excellent condition • 3 tomatoes ripening", plant.healthSubtext)
 
         // Telemetry grid readings matching Task Objectives

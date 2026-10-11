@@ -27,18 +27,19 @@ data class PlantAvatar(
     val level: String = "Lvl. 0 Urban Beginner",
     val levelInt: Int = 0,
     val currentXp: Int = 0,
-    val maxXp: Int = 100,
-    val growthStage: PlantGrowthStage = PlantGrowthStage.SEEDLING_SPROUT,
+    val maxXp: Int = PlantGrowthStage.GERMINATION.maxXp,
+    val growthStage: PlantGrowthStage = PlantGrowthStage.GERMINATION,
     val statusTag: String = "Vibrant & Healthy",
     val streakDays: Int = 0,
     val targetStreakDays: Int = 7,
-    val speechBubble: String = "Welcome! I'm a tiny sprout getting started. Keep soil hydrated!",
+    val speechBubble: String = PlantGrowthStage.GERMINATION.speechBubble,
     val dayCount: Int = 47,
     val healthPercent: Int = 92,
     val healthSubtext: String = "Excellent condition • 3 tomatoes ripening",
-    val stageTag: String = "Stage 3 - Mature",
+    val stageTag: String = "Stage ${growthStage.stageLevel + 1} - ${growthStage.stageTitle}",
     val journalEntries: List<JournalEntry> = DEFAULT_JOURNAL_ENTRIES,
-    val moistureHistory: List<MoistureHistoryEntry> = DEFAULT_MOISTURE_HISTORY
+    val moistureHistory: List<MoistureHistoryEntry> = DEFAULT_MOISTURE_HISTORY,
+    val nextWateringInHours: Int? = null
 ) {
     companion object {
         val DEFAULT_JOURNAL_ENTRIES = listOf(

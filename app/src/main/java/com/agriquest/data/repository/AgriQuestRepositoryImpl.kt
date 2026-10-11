@@ -81,12 +81,12 @@ class AgriQuestRepositoryImpl(
             level = "Lvl. 0 Urban Beginner",
             levelInt = 0,
             currentXp = 0,
-            maxXp = 100,
-            growthStage = PlantGrowthStage.SEEDLING_SPROUT,
+            maxXp = PlantGrowthStage.GERMINATION.maxXp,
+            growthStage = PlantGrowthStage.GERMINATION,
             statusTag = "Vibrant & Healthy",
             streakDays = 0,
             targetStreakDays = 7,
-            speechBubble = PlantGrowthStage.SEEDLING_SPROUT.speechBubble
+            speechBubble = PlantGrowthStage.GERMINATION.speechBubble
         )
     )
     override val plantAvatar: StateFlow<PlantAvatar> = _plantAvatar.asStateFlow()
@@ -267,6 +267,7 @@ class AgriQuestRepositoryImpl(
             currentXp = totalXp,
             maxXp = maxXp,
             growthStage = stage,
+            stageTag = "Stage ${stage.stageLevel + 1} - ${stage.stageTitle}",
             streakDays = streakDays,
             speechBubble = stage.speechBubble
         )
@@ -290,12 +291,8 @@ class AgriQuestRepositoryImpl(
     }
 
     private fun calculateLevelAndStage(totalXp: Int): Triple<Int, PlantGrowthStage, Int> {
-        return when {
-            totalXp < 100 -> Triple(0, PlantGrowthStage.SEEDLING_SPROUT, 100)
-            totalXp < 250 -> Triple(1, PlantGrowthStage.VEGETATIVE_LEAFY, 250)
-            totalXp < 450 -> Triple(2, PlantGrowthStage.FLOWERING, 450)
-            else -> Triple(3, PlantGrowthStage.FRUITING_HARVEST, 700)
-        }
+        val stage = PlantGrowthStage.fromXp(totalXp)
+        return Triple(stage.stageLevel, stage, stage.maxXp)
     }
 
     override suspend fun addXp(amount: Int) {
@@ -308,6 +305,7 @@ class AgriQuestRepositoryImpl(
             currentXp = newXp,
             maxXp = newMaxXp,
             growthStage = newStage,
+            stageTag = "Stage ${newStage.stageLevel + 1} - ${newStage.stageTitle}",
             streakDays = _streakDays.value,
             speechBubble = newStage.speechBubble
         )

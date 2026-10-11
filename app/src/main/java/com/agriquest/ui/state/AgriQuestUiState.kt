@@ -96,7 +96,7 @@ data class AgriQuestUiState(
                 list.add(PlantMoodle.THRIVING)
             }
 
-            if (plant.growthStage == PlantGrowthStage.FRUITING_HARVEST || plant.levelInt >= 3) {
+            if (plant.growthStage == PlantGrowthStage.RIPENING) {
                 list.add(PlantMoodle.READY_TO_HARVEST)
             }
 

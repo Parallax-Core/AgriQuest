@@ -127,7 +127,7 @@ fun PlantAvatarHeroCard(
                     .padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                // 2D Potted Plant Vector Illustration
+                // Imported plant image for the current growth stage
                 PlantAvatarCanvas(
                     growthStage = plant.growthStage,
                     size = 140.dp

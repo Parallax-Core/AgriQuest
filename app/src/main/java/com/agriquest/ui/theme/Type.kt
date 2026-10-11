@@ -5,11 +5,23 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.unit.sp
 import com.agriquest.R
 
+@OptIn(ExperimentalTextApi::class)
 val InterFontFamily = FontFamily(
-    Font(R.font.inter, weight = FontWeight.SemiBold)
+    Font(R.font.inter, weight = FontWeight.SemiBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(600))),
+    Font(R.font.inter, weight = FontWeight.Bold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+    Font(R.font.inter, weight = FontWeight.ExtraBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(800)))
+)
+
+val SilkscreenFontFamily = FontFamily(
+    Font(R.font.silkscreen_bold, weight = FontWeight.Bold)
 )
 
 // Set of Material typography styles to start with
