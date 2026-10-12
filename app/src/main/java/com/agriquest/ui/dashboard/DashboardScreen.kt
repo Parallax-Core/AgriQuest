@@ -2,20 +2,8 @@
 package com.agriquest.ui.dashboard
 
 import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,7 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
@@ -37,9 +24,9 @@ import com.agriquest.domain.model.PlantSource
 import com.agriquest.ui.ai.AiDiagnosticsScreenContent
 import com.agriquest.ui.awards.AwardsScreenContent
 import com.agriquest.ui.components.ActuatorControlsCard
-import com.agriquest.ui.components.AgriQuestBottomNav
-import com.agriquest.ui.components.DailyQuizCard
+import com.agriquest.ui.components.AppScreen
 import com.agriquest.ui.components.DailyQuestsDashboardSection
+import com.agriquest.ui.components.DailyQuizCard
 import com.agriquest.ui.components.Esp32HardwareSetupDialog
 import com.agriquest.ui.components.PlantAvatarHeroCard
 import com.agriquest.ui.components.PlantStagesCard
@@ -50,7 +37,6 @@ import com.agriquest.ui.plant.PlantDetailsScreenContent
 import com.agriquest.ui.quests.QuestsScreenContent
 import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.theme.AgriQuestTheme
-import com.agriquest.ui.theme.Slate50
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import kotlinx.coroutines.launch
 
@@ -229,101 +215,79 @@ fun HomeDashboardContent(
     onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = Slate50,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        bottomBar = {
-            AgriQuestBottomNav(
-                selectedTab = selectedTab,
-                onTabSelected = onTabSelected,
-                streakDays = uiState.plant.streakDays,
-                targetStreakDays = uiState.plant.targetStreakDays
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Slate50),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 430.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // 1. Top Level Banner (Sky Blue Header)
-                TopLevelBanner(
-                    userLevel = uiState.plant.level,
-                    userLevelInt = uiState.plant.levelInt,
-                    currentXp = uiState.plant.currentXp,
-                    maxXp = uiState.plant.maxXp,
-                    streakDays = uiState.plant.streakDays,
-                    targetStreakDays = uiState.plant.targetStreakDays,
-                    speechBubble = uiState.plant.speechBubble,
-                    connectionState = uiState.connection,
-                    selectedPlantSource = uiState.plantSource,
-                    onPlantSourceSelected = onPlantSourceSelected,
-                    onScanForEsp32 = onScanForEsp32
-                )
+    AppScreen(
+        modifier = modifier,
+        uiState = uiState,
+        selectedTab = selectedTab,
+        onTabSelected = onTabSelected,
+        snackbarHostState = snackbarHostState
+    ) {
+        // 1. Top Level Banner (Sky Blue Header)
+        TopLevelBanner(
+            userLevel = uiState.plant.level,
+            userLevelInt = uiState.plant.levelInt,
+            currentXp = uiState.plant.currentXp,
+            maxXp = uiState.plant.maxXp,
+            streakDays = uiState.plant.streakDays,
+            targetStreakDays = uiState.plant.targetStreakDays,
+            speechBubble = uiState.plant.speechBubble,
+            connectionState = uiState.connection,
+            selectedPlantSource = uiState.plantSource,
+            onPlantSourceSelected = onPlantSourceSelected,
+            onScanForEsp32 = onScanForEsp32
+        )
 
-                // 2. Digital Twin / Plant Avatar Hero Card + Active Floating Moodles
-                PlantAvatarHeroCard(
-                    plant = uiState.plant,
-                    activeMoodles = uiState.activeMoodles
-                )
+        // 2. Digital Twin / Plant Avatar Hero Card + Active Floating Moodles
+        PlantAvatarHeroCard(
+            plant = uiState.plant,
+            activeMoodles = uiState.activeMoodles
+        )
 
-                // 3. Environment Conditions Section (4 Real-Time Telemetry Cards)
-                TelemetryGrid(
-                    telemetry = uiState.telemetry
-                )
+        // 3. Environment Conditions Section (4 Real-Time Telemetry Cards)
+        TelemetryGrid(
+            telemetry = uiState.telemetry
+        )
 
-                // 4. Plant Stages Timeline Section
-                PlantStagesCard(
-                    currentStage = uiState.plant.growthStage,
-                    onViewMoreClick = { onTabSelected(1) }
-                )
+        // 4. Plant Stages Timeline Section
+        PlantStagesCard(
+            currentStage = uiState.plant.growthStage,
+            onViewMoreClick = { onTabSelected(1) }
+        )
 
-                // 5. Daily Agro-Quiz Card
-                DailyQuizCard(
-                    question = uiState.currentQuizQuestion,
-                    isQuizCompletedToday = uiState.isQuizCompletedToday,
-                    selectedOptionIndex = uiState.selectedQuizOptionIndex,
-                    isAnswerCorrect = uiState.isQuizAnswerCorrect,
-                    onAnswerSelected = onAnswerQuiz,
-                    onNextQuestion = onNextQuizQuestion
-                )
+        // 5. Daily Agro-Quiz Card
+        DailyQuizCard(
+            question = uiState.currentQuizQuestion,
+            isQuizCompletedToday = uiState.isQuizCompletedToday,
+            selectedOptionIndex = uiState.selectedQuizOptionIndex,
+            isAnswerCorrect = uiState.isQuizAnswerCorrect,
+            onAnswerSelected = onAnswerQuiz,
+            onNextQuestion = onNextQuizQuestion
+        )
 
-                // 6. Daily Quests Section
-                DailyQuestsDashboardSection(
-                    quests = uiState.quests,
-                    onClaimQuest = onClaimQuest,
-                    onViewAllQuestsClick = { onTabSelected(2) }
-                )
+        // 6. Daily Quests Section
+        DailyQuestsDashboardSection(
+            quests = uiState.quests,
+            onClaimQuest = onClaimQuest,
+            onViewAllQuestsClick = { onTabSelected(2) }
+        )
 
-                // 7. Active Quest Banner
-                QuestBanner(
-                    quest = uiState.activeQuest,
-                    quests = uiState.quests,
-                    onClaimQuest = onClaimQuest
-                )
+        // 7. Active Quest Banner
+        QuestBanner(
+            quest = uiState.activeQuest,
+            quests = uiState.quests,
+            onClaimQuest = onClaimQuest
+        )
 
-                // 8. Controls Section (2 Dark Teal/Blue Buttons)
-                ActuatorControlsCard(
-                    actuatorState = uiState.actuator,
-                    onTriggerPump = onTriggerPump,
-                    onToggleFanMode = onToggleFanMode
-                )
+        // 8. Controls Section (2 Dark Teal/Blue Buttons)
+        ActuatorControlsCard(
+            actuatorState = uiState.actuator,
+            onTriggerPump = onTriggerPump,
+            onToggleFanMode = onToggleFanMode
+        )
 
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
-    }
+        Spacer(modifier = Modifier.height(16.dp))
+
+}
 }
 
 @Preview(showBackground = true, device = "spec:width=411dp,height=891dp")

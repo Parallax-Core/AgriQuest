@@ -1,6 +1,5 @@
 package com.agriquest.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,10 +22,10 @@ import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Sensors
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -46,32 +45,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.agriquest.R
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.ConnectionStatus
 import com.agriquest.domain.model.PlantSource
+import com.agriquest.ui.components.AppCard
 import com.agriquest.ui.theme.AgriQuestTheme
+import com.agriquest.ui.theme.AppCardBackground
+import com.agriquest.ui.theme.AppCardBorder
+import com.agriquest.ui.theme.AppLayout
+import com.agriquest.ui.theme.AppTextColor
 import com.agriquest.ui.theme.Emerald600
 import com.agriquest.ui.theme.PureWhite
-import com.agriquest.ui.theme.Slate100
-import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate700
 import com.agriquest.ui.theme.Slate900
 
 /**
- * Sky Blue Header Component for AgriQuest Mobile.
- *
- * Features:
- * - Soft Sky Blue background (`0xFFE0F2FE`).
- * - Logo image `aqlogo.png` & Settings gear icon `⚙`.
- * - Speech bubble (`"Your tomato is looking healthy!"`).
- * - Level Progress Bar (`Lv. 3`, `120 / 250 XP`).
- * - Plant source dropdown selector & ESP32 connection badge.
- */
+* Home Header Component for AgriQuest Mobile.
+*
+* Features:
+* - Cream background (`0xFFFAEDCB`).
+* - Logo image `aqlogo.png` & Settings gear icon `⚙`.
+* - Speech bubble (`"Your tomato is looking healthy!"`).
+* - Level Progress Bar (`Lv. 3`, `120 / 250 XP`).
+* - Plant source dropdown selector & ESP32 connection badge.
+*/
 @Composable
 fun TopLevelBanner(
     modifier: Modifier = Modifier,
@@ -91,18 +91,12 @@ fun TopLevelBanner(
     val xpProgress = if (maxXp > 0) (currentXp.toFloat() / maxXp.toFloat()).coerceIn(0f, 1f) else 0f
     var dropdownExpanded by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, Color(0xFFBAE6FD))
-    ) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            .fillMaxWidth()
+            .padding(AppLayout.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
         ) {
             // Header Row: `aqlogo.png` logo & Settings Gear Icon
             Row(
@@ -127,18 +121,30 @@ fun TopLevelBanner(
                         targetStreakDays = targetStreakDays
                     )
 
-                    // Settings Gear Button ⚙
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(PureWhite, CircleShape)
-                            .border(1.dp, Color(0xFFBAE6FD), CircleShape)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Settings Gear Button ⚙
+                        IconButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier
+                            .size(36.dp)
+                            .background(AppCardBackground, CircleShape)
+                            .border(1.dp, AppCardBorder, CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Settings,
+                                contentDescription = "Settings Gear",
+                                tint = Color(0xFF0369A1),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         Icon(
-                            imageVector = Icons.Rounded.Settings,
-                            contentDescription = "Settings Gear",
-                            tint = Color(0xFF0369A1),
+                            imageVector = if (connectionState.status == ConnectionStatus.CONNECTED)
+                            Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
+                            contentDescription = "ESP32 connection: ${connectionState.statusText}",
+                            tint = Color(connectionState.indicatorColorArgb),
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -148,10 +154,10 @@ fun TopLevelBanner(
             // Speech Bubble Box Container
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Color(0xFFBAE6FD), RoundedCornerShape(14.dp)),
+                .fillMaxWidth()
+                .border(1.dp, AppCardBorder, RoundedCornerShape(14.dp)),
                 shape = RoundedCornerShape(14.dp),
-                color = PureWhite
+                color = AppCardBackground
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -166,11 +172,7 @@ fun TopLevelBanner(
                     )
                     Text(
                         text = speechBubble,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Slate900,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        )
+                        style = MaterialTheme.typography.bodySmall.copy(color = AppTextColor)
                     )
                 }
             }
@@ -187,19 +189,11 @@ fun TopLevelBanner(
                 ) {
                     Text(
                         text = "Lv. $userLevelInt ($userLevel)",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color(0xFF0369A1),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color(0xFF0369A1))
                     )
                     Text(
                         text = "$currentXp / $maxXp XP",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Slate900,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp
-                        )
+                        style = MaterialTheme.typography.bodySmall.copy(color = AppTextColor)
                     )
                 }
 
@@ -207,9 +201,9 @@ fun TopLevelBanner(
                 LinearProgressIndicator(
                     progress = { xpProgress },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp)),
                     color = Color(0xFF0288D1),
                     trackColor = PureWhite
                 )
@@ -226,11 +220,11 @@ fun TopLevelBanner(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = PureWhite,
+                    color = AppCardBackground,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, Color(0xFFBAE6FD), RoundedCornerShape(12.dp))
-                        .clickable { dropdownExpanded = true }
+                    .fillMaxWidth()
+                    .border(1.dp, AppCardBorder, RoundedCornerShape(12.dp))
+                    .clickable { dropdownExpanded = true }
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -249,11 +243,7 @@ fun TopLevelBanner(
                             )
                             Text(
                                 text = "Source: $currentSourceLabel",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 12.sp,
-                                    color = Slate700
-                                )
+                                style = MaterialTheme.typography.labelMedium.copy(color = AppTextColor)
                             )
                         }
                         Icon(
@@ -278,10 +268,7 @@ fun TopLevelBanner(
                             text = {
                                 Text(
                                     text = itemLabel,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = if (source == selectedPlantSource) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (source == selectedPlantSource) Emerald600 else Slate900
-                                    )
+                                    style = MaterialTheme.typography.bodyMedium.copy(color = if (source == selectedPlantSource) Emerald600 else Slate900)
                                 )
                             },
                             onClick = {
@@ -302,9 +289,9 @@ fun TopLevelBanner(
                     onClick = onScanForEsp32,
                     enabled = !isScanning,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(36.dp),
-                    shape = RoundedCornerShape(10.dp),
+                    .fillMaxWidth()
+                    .height(36.dp),
+                    shape = AppLayout.buttonShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Emerald600,
                         contentColor = PureWhite,
@@ -319,7 +306,7 @@ fun TopLevelBanner(
                         if (isScanning) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
-                                color = PureWhite,
+                                color = AppCardBackground,
                                 strokeWidth = 2.dp
                             )
                         } else {
@@ -332,10 +319,7 @@ fun TopLevelBanner(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = buttonText,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
+                            style = MaterialTheme.typography.labelMedium
                         )
                     }
                 }

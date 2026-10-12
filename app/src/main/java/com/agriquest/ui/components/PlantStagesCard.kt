@@ -2,12 +2,12 @@ package com.agriquest.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -16,7 +16,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,21 +26,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import com.agriquest.R
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.agriquest.R
 import com.agriquest.domain.model.PlantGrowthStage
+import com.agriquest.ui.components.AppCard
 import com.agriquest.ui.theme.AgriQuestTheme
-import com.agriquest.ui.theme.PureWhite
+import com.agriquest.ui.theme.AppLayout
+import com.agriquest.ui.theme.AppTextColor
 import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate900
 
 /**
- * Plant Stages Stepper Timeline Card for AgriQuest Mobile.
- * Displays 6 stage timeline steps with active step highlighting and "View More ➔" action button.
- */
+* Plant Stages Stepper Timeline Card for AgriQuest Mobile.
+* Displays 6 stage timeline steps with active step highlighting and "View More ➔" action button.
+*/
 @Composable
 fun PlantStagesCard(
     modifier: Modifier = Modifier,
@@ -67,27 +66,17 @@ fun PlantStagesCard(
     )
     val stageNames = listOf("Germination", "Seedling", "Vegetative", "Flowering", "Fruiting", "Ripening")
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        border = BorderStroke(1.dp, Slate200),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            .fillMaxWidth()
+            .padding(AppLayout.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
         ) {
             // Header Row: Title `🍃 Plant Stages`
             Text(
                 text = "🍃 Plant Stages",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp,
-                    color = Slate900
-                )
+                style = MaterialTheme.typography.titleMedium.copy(color = AppTextColor)
             )
 
             // Each image contains the complete timeline with its current stage highlighted.
@@ -95,34 +84,30 @@ fun PlantStagesCard(
                 painter = painterResource(id = stageImages[activeStageIndex]),
                 contentDescription = "Tomato growth timeline: ${stageNames[activeStageIndex]} active",
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(363f / 75f),
+                .fillMaxWidth()
+                .aspectRatio(363f / 75f),
                 contentScale = ContentScale.Fit
             )
 
             // Button: `View More ➔`
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onViewMoreClick() },
+                .fillMaxWidth()
+                .clickable { onViewMoreClick() },
                 shape = RoundedCornerShape(12.dp),
                 color = Color(0xFFF1F5F9),
                 border = BorderStroke(1.dp, Slate200)
             ) {
                 Row(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp, horizontal = 14.dp),
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp, horizontal = 14.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "View More Details",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = Slate900
-                        )
+                        style = MaterialTheme.typography.labelLarge.copy(color = AppTextColor)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(
@@ -142,7 +127,7 @@ fun PlantStagesCard(
 fun PlantStagesCardPreview() {
     AgriQuestTheme {
         PlantStagesCard(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(AppLayout.cardPadding)
         )
     }
 }

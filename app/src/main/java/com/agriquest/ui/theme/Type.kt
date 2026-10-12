@@ -12,6 +12,10 @@ import com.agriquest.R
 
 @OptIn(ExperimentalTextApi::class)
 val InterFontFamily = FontFamily(
+    Font(R.font.inter, weight = FontWeight.Normal,
+        variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+    Font(R.font.inter, weight = FontWeight.Medium,
+        variationSettings = FontVariation.Settings(FontVariation.weight(500))),
     Font(R.font.inter, weight = FontWeight.SemiBold,
         variationSettings = FontVariation.Settings(FontVariation.weight(600))),
     Font(R.font.inter, weight = FontWeight.Bold,
@@ -24,29 +28,29 @@ val SilkscreenFontFamily = FontFamily(
     Font(R.font.silkscreen_bold, weight = FontWeight.Bold)
 )
 
-// Set of Material typography styles to start with
+// Quests is the reference: pixel headings, compact Inter content and badges.
+private fun appText(size: Int, height: Int, heading: Boolean = false) = TextStyle(
+    fontFamily = if (heading) SilkscreenFontFamily else InterFontFamily,
+    fontWeight = FontWeight.Bold,
+    fontSize = size.sp,
+    lineHeight = height.sp,
+    letterSpacing = 0.sp
+)
+
 val Typography = Typography(
-    bodyLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.5.sp
-    )
-    /* Other default text styles to override
-    titleLarge = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Normal,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp
-    ),
-    labelSmall = TextStyle(
-        fontFamily = FontFamily.Default,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
-    )
-    */
+    displayLarge = appText(28, 33, heading = true),
+    displayMedium = appText(28, 33, heading = true),
+    displaySmall = appText(28, 33, heading = true),
+    headlineLarge = appText(22, 28, heading = true),
+    headlineMedium = appText(22, 28, heading = true),
+    headlineSmall = appText(22, 28, heading = true),
+    titleLarge = appText(16, 21),
+    titleMedium = appText(16, 21, heading = true),
+    titleSmall = appText(14, 19),
+    bodyLarge = appText(14, 19),
+    bodyMedium = appText(14, 19),
+    bodySmall = appText(12, 17),
+    labelLarge = appText(12, 17),
+    labelMedium = appText(11, 16),
+    labelSmall = appText(10, 15)
 )

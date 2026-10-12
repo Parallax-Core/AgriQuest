@@ -30,18 +30,16 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.agriquest.R
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.theme.Amber500
 import com.agriquest.ui.theme.PureWhite
 
 /**
- * Tab definitions for AgriQuest Persistent Bottom Navigation Bar.
- */
+* Tab definitions for AgriQuest Persistent Bottom Navigation Bar.
+*/
 enum class AgriQuestTab(
     val title: String,
     val icon: ImageVector,
@@ -55,9 +53,9 @@ enum class AgriQuestTab(
 }
 
 /**
- * Persistent Bottom Navigation Bar for AgriQuest Mobile.
- * Blue background (`0xFF1B3C4D`) with yellow selected images.
- */
+* Persistent Bottom Navigation Bar for AgriQuest Mobile.
+* Blue background (`0xFF1B3C4D`) with yellow selected images.
+*/
 @Composable
 fun AgriQuestBottomNav(
     modifier: Modifier = Modifier,
@@ -83,8 +81,8 @@ fun AgriQuestBottomNav(
         ) {
             NavigationBar(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 430.dp),
+                .fillMaxWidth()
+                .widthIn(max = 430.dp),
                 containerColor = navBarColor,
                 contentColor = PureWhite,
                 tonalElevation = 0.dp
@@ -124,8 +122,6 @@ fun AgriQuestBottomNav(
                                 Text(
                                     text = tab.title,
                                     style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        fontSize = 11.sp,
                                         color = if (isSelected) selectedImageColor else unselectedIconColor
                                     )
                                 )

@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,13 +37,14 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantMoodle
+import com.agriquest.ui.components.AppCard
 import com.agriquest.ui.theme.AgriQuestTheme
+import com.agriquest.ui.theme.AppLayout
+import com.agriquest.ui.theme.AppTextColor
 import com.agriquest.ui.theme.Emerald200
 import com.agriquest.ui.theme.Emerald50
 import com.agriquest.ui.theme.Emerald600
@@ -52,32 +52,25 @@ import com.agriquest.ui.theme.Emerald700
 import com.agriquest.ui.theme.PureWhite
 import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate50
-import com.agriquest.ui.theme.Slate800
-import com.agriquest.ui.theme.Slate900
 import kotlinx.coroutines.delay
 
 /**
- * Digital Twin / Plant Avatar Hero Card displaying 2D Plant Illustration,
- * Floating Moodles Column Badge Stack, Health Tag, Streak Badge, and Speech Bubble.
- */
+* Digital Twin / Plant Avatar Hero Card displaying 2D Plant Illustration,
+* Floating Moodles Column Badge Stack, Health Tag, Streak Badge, and Speech Bubble.
+*/
 @Composable
 fun PlantAvatarHeroCard(
     modifier: Modifier = Modifier,
     plant: PlantAvatar = PlantAvatar(),
     activeMoodles: List<PlantMoodle> = listOf(PlantMoodle.THRIVING)
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
+            .fillMaxWidth()
+            .padding(AppLayout.cardPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
         ) {
             // Header Row: Status Tag ("Vibrant & Healthy") & Glowing Streak Badge
             Row(
@@ -104,11 +97,7 @@ fun PlantAvatarHeroCard(
                         )
                         Text(
                             text = plant.statusTag,
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = Emerald700
-                            )
+                            style = MaterialTheme.typography.labelMedium.copy(color = Emerald700)
                         )
                     }
                 }
@@ -123,8 +112,8 @@ fun PlantAvatarHeroCard(
             // Central Plant Avatar Container + Floating Right Moodles Column
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 // Imported plant image for the current growth stage
@@ -137,8 +126,8 @@ fun PlantAvatarHeroCard(
                 if (activeMoodles.isNotEmpty()) {
                     Column(
                         modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 4.dp),
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -175,8 +164,8 @@ fun PlantAvatarHeroCard(
 }
 
 /**
- * Agro-speech bubble widget with a triangle tail pointing upwards towards the plant avatar.
- */
+* Agro-speech bubble widget with a triangle tail pointing upwards towards the plant avatar.
+*/
 @Composable
 private fun SpeechBubbleWidget(
     message: String,
@@ -205,8 +194,8 @@ private fun SpeechBubbleWidget(
         // Speech Bubble Box Container
         Surface(
             modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Slate200, RoundedCornerShape(14.dp)),
+            .fillMaxWidth()
+            .border(1.dp, Slate200, RoundedCornerShape(14.dp)),
             shape = RoundedCornerShape(14.dp),
             color = Slate50
         ) {
@@ -223,12 +212,7 @@ private fun SpeechBubbleWidget(
                 )
                 Text(
                     text = message,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = Slate800,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
+                    style = MaterialTheme.typography.bodySmall.copy(color = AppTextColor)
                 )
             }
         }
@@ -256,9 +240,9 @@ fun PlantAvatarHeroCardPreview() {
 }
 
 /**
- * Care Streak Pill Badge chip displaying glowing fire highlight state when streak > 0 vs gray/muted chip when streak == 0,
- * with pulsing/pop scale animation when streak increments.
- */
+* Care Streak Pill Badge chip displaying glowing fire highlight state when streak > 0 vs gray/muted chip when streak == 0,
+* with pulsing/pop scale animation when streak increments.
+*/
 @Composable
 fun CareStreakBadge(
     streakDays: Int,
@@ -304,11 +288,7 @@ fun CareStreakBadge(
         ) {
             Text(
                 text = "🔥 $streakDays / $targetStreakDays Days",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = textColor
-                )
+                style = MaterialTheme.typography.labelMedium.copy(color = textColor)
             )
         }
     }

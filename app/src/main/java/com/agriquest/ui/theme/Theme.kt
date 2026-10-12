@@ -19,13 +19,13 @@ private val LightColorScheme = lightColorScheme(
     onTertiary = PureWhite,
     tertiaryContainer = Amber100,
     onTertiaryContainer = Amber500,
-    background = Slate50,
-    onBackground = Slate900,
-    surface = PureWhite,
-    onSurface = Slate900,
+    background = AppPageBackground,
+    onBackground = AppTextColor,
+    surface = AppCardBackground,
+    onSurface = AppTextColor,
     surfaceVariant = Slate100,
     onSurfaceVariant = Slate500,
-    outline = Slate200,
+    outline = AppCardBorder,
     outlineVariant = Slate300
 )
 

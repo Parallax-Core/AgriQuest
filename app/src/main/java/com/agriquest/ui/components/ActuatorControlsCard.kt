@@ -1,6 +1,5 @@
 package com.agriquest.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.Person
@@ -20,7 +18,6 @@ import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,13 +27,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.agriquest.domain.model.ActuatorState
 import com.agriquest.domain.model.FanMode
+import com.agriquest.ui.components.AppCard
 import com.agriquest.ui.theme.AgriQuestTheme
+import com.agriquest.ui.theme.AppLayout
+import com.agriquest.ui.theme.AppTextColor
 import com.agriquest.ui.theme.Emerald50
 import com.agriquest.ui.theme.Emerald600
 import com.agriquest.ui.theme.Emerald700
@@ -44,12 +42,11 @@ import com.agriquest.ui.theme.PureWhite
 import com.agriquest.ui.theme.Slate100
 import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate700
-import com.agriquest.ui.theme.Slate900
 
 /**
- * Controls Section Card allowing live IoT interactive pump triggers
- * and fan mode cycling (AUTO -> ON -> OFF -> AUTO).
- */
+* Controls Section Card allowing live IoT interactive pump triggers
+* and fan mode cycling (AUTO -> ON -> OFF -> AUTO).
+*/
 @Composable
 fun ActuatorControlsCard(
     modifier: Modifier = Modifier,
@@ -59,18 +56,12 @@ fun ActuatorControlsCard(
 ) {
     val darkTealColor = Color(0xFF0F766E)
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = PureWhite),
-        border = BorderStroke(1.dp, Slate200),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            .fillMaxWidth()
+            .padding(AppLayout.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
         ) {
             // Title Header Row: "👤 Controls"
             Row(
@@ -90,11 +81,7 @@ fun ActuatorControlsCard(
                     )
                     Text(
                         text = "👤 Controls",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = Slate900
-                        )
+                        style = MaterialTheme.typography.titleMedium.copy(color = AppTextColor)
                     )
                 }
 
@@ -110,11 +97,7 @@ fun ActuatorControlsCard(
                 ) {
                     Text(
                         text = statusText,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            color = statusColor
-                        ),
+                        style = MaterialTheme.typography.labelSmall.copy(color = statusColor),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -136,9 +119,9 @@ fun ActuatorControlsCard(
                     onClick = onTriggerPump,
                     enabled = !actuatorState.isPumpActive,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    .fillMaxWidth()
+                    .height(48.dp),
+                    shape = AppLayout.buttonShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = darkTealColor,
                         contentColor = PureWhite,
@@ -166,10 +149,7 @@ fun ActuatorControlsCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = pumpButtonText,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
                 }
@@ -180,9 +160,9 @@ fun ActuatorControlsCard(
                 Button(
                     onClick = onToggleFanMode,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
+                    .fillMaxWidth()
+                    .height(48.dp),
+                    shape = AppLayout.buttonShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF0288D1),
                         contentColor = PureWhite
@@ -201,10 +181,7 @@ fun ActuatorControlsCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = fanModeText,
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
+                            style = MaterialTheme.typography.labelLarge
                         )
                     }
                 }
@@ -218,8 +195,8 @@ fun ActuatorControlsCard(
 fun ActuatorControlsCardPreview() {
     AgriQuestTheme {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(AppLayout.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
         ) {
             ActuatorControlsCard(
                 actuatorState = ActuatorState(

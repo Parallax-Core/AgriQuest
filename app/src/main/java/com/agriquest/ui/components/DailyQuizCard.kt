@@ -21,8 +21,6 @@ import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,32 +30,27 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.agriquest.domain.model.AgroQuizQuestion
-import com.agriquest.ui.theme.InterFontFamily
+import com.agriquest.ui.components.AppCard
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.theme.Amber100
 import com.agriquest.ui.theme.Amber600
+import com.agriquest.ui.theme.AppLayout
+import com.agriquest.ui.theme.AppTextColor
 import com.agriquest.ui.theme.Emerald100
 import com.agriquest.ui.theme.Emerald50
 import com.agriquest.ui.theme.Emerald600
 import com.agriquest.ui.theme.Emerald700
 import com.agriquest.ui.theme.PureWhite
 import com.agriquest.ui.theme.Slate100
-import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate300
 import com.agriquest.ui.theme.Slate600
-import com.agriquest.ui.theme.Slate700
-import com.agriquest.ui.theme.Slate800
-import com.agriquest.ui.theme.Slate900
 
 val Red100 = Color(0xFFFEE2E2)
 val Red600 = Color(0xFFDC2626)
 val Red700 = Color(0xFFB91C1C)
-
 
 @Composable
 fun DailyQuizCard(
@@ -71,18 +64,12 @@ fun DailyQuizCard(
 ) {
     val hasAnswered = selectedOptionIndex >= 0
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(15.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF5D9)),
-        border = BorderStroke(2.dp, Color(0xFFC9A86A)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            .fillMaxWidth()
+            .padding(AppLayout.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
         ) {
             // Header Row: Title & XP Reward Pill
             Row(
@@ -96,12 +83,7 @@ fun DailyQuizCard(
                 ) {
                     Text(
                         text = "🧠 Daily Agro-Quiz",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = InterFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color(0xFF7A5A30)
-                        )
+                        style = MaterialTheme.typography.titleMedium.copy(color = AppTextColor)
                     )
                 }
 
@@ -112,12 +94,7 @@ fun DailyQuizCard(
                 ) {
                     Text(
                         text = "+${question.xpReward} XP",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontFamily = InterFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Emerald700
-                        ),
+                        style = MaterialTheme.typography.labelMedium.copy(color = Emerald700),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
@@ -134,8 +111,8 @@ fun DailyQuizCard(
                     ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
+                            .fillMaxWidth()
+                            .padding(AppLayout.cardPadding),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -157,21 +134,11 @@ fun DailyQuizCard(
                             Column {
                                 Text(
                                     text = "🎉 Correct! +30 XP Awarded!",
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = InterFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Amber600
-                                    )
+                                    style = MaterialTheme.typography.bodyMedium.copy(color = Amber600)
                                 )
                                 Text(
                                     text = "Great job keeping your plant knowledge sharp!",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = InterFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = Slate600
-                                    )
+                                    style = MaterialTheme.typography.bodySmall.copy(color = Slate600)
                                 )
                             }
                         }
@@ -185,12 +152,7 @@ fun DailyQuizCard(
                     ) {
                         Text(
                             text = "❌ Incorrect! Review explanation below.",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = InterFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = Red700
-                            ),
+                            style = MaterialTheme.typography.bodyMedium.copy(color = Red700),
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
@@ -200,13 +162,7 @@ fun DailyQuizCard(
             // Question Text
             Text(
                 text = question.questionText,
-                style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = InterFontFamily,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = Color(0xFF7A5A30),
-                    lineHeight = 20.sp
-                )
+                style = MaterialTheme.typography.bodyMedium.copy(color = AppTextColor)
             )
 
             // Option Buttons List
@@ -241,15 +197,15 @@ fun DailyQuizCard(
                         color = backgroundColor,
                         border = BorderStroke(1.5.dp, borderColor),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !hasAnswered) {
-                                onAnswerSelected(index)
-                            }
+                        .fillMaxWidth()
+                        .clickable(enabled = !hasAnswered) {
+                            onAnswerSelected(index)
+                        }
                     ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -266,24 +222,14 @@ fun DailyQuizCard(
                                     Box(contentAlignment = Alignment.Center) {
                                         Text(
                                             text = ('A' + index).toString(),
-                                            style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = InterFontFamily,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 12.sp,
-                                                color = if (hasAnswered && (isCorrectOption || isSelected)) PureWhite else Slate600
-                                            )
+                                            style = MaterialTheme.typography.labelSmall.copy(color = if (hasAnswered && (isCorrectOption || isSelected)) PureWhite else Slate600)
                                         )
                                     }
                                 }
 
                                 Text(
                                     text = optionText,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                            fontFamily = InterFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = textColor
-                                    )
+                                    style = MaterialTheme.typography.bodyMedium.copy(color = textColor)
                                 )
                             }
 
@@ -319,29 +265,18 @@ fun DailyQuizCard(
                 ) {
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
+                        .fillMaxWidth()
+                        .padding(AppLayout.cardPadding),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = "💡 Explanation & Agro-Insight",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                            fontFamily = InterFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = Emerald700
-                            )
+                            style = MaterialTheme.typography.titleSmall.copy(color = Emerald700)
                         )
 
                         Text(
                             text = question.explanation,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                            fontFamily = InterFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                lineHeight = 17.sp,
-                                color = Slate700
-                            )
+                            style = MaterialTheme.typography.bodySmall.copy(color = AppTextColor)
                         )
                     }
                 }
@@ -352,7 +287,7 @@ fun DailyQuizCard(
                 Button(
                     onClick = onNextQuestion,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(4.dp),
+                    shape = AppLayout.buttonShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF193F4E),
                         contentColor = PureWhite
@@ -368,12 +303,7 @@ fun DailyQuizCard(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Answer Another Question 🔄",
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontFamily = InterFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = PureWhite
-                        )
+                        style = MaterialTheme.typography.titleSmall.copy(color = PureWhite)
                     )
                 }
             } else {
@@ -383,7 +313,7 @@ fun DailyQuizCard(
                 ) {
                     OutlinedButton(
                         onClick = onNextQuestion,
-                        shape = RoundedCornerShape(4.dp),
+                        shape = AppLayout.buttonShape,
                         border = BorderStroke(1.dp, Slate300),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                     ) {
@@ -396,12 +326,7 @@ fun DailyQuizCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Next Question 🔄",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                            fontFamily = InterFontFamily,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = Slate700
-                            )
+                            style = MaterialTheme.typography.labelMedium.copy(color = AppTextColor)
                         )
                     }
                 }
@@ -415,7 +340,7 @@ fun DailyQuizCard(
 fun DailyQuizCardPreview() {
     AgriQuestTheme {
         DailyQuizCard(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(AppLayout.cardPadding)
         )
     }
 }
