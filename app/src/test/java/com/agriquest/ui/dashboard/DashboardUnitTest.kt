@@ -60,7 +60,7 @@ class DashboardUnitTest {
         assertEquals("+50 XP", quest.xpRewardText)
 
         // 2. Default Quests List
-        assertEquals(3, uiState.quests.size)
+        assertEquals(13, uiState.quests.size)
 
         // 3. Actuator Controls Objectives
         val actuator = uiState.actuator

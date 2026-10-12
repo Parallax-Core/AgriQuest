@@ -1,8 +1,8 @@
 package com.agriquest.ui.quests
 
 import com.agriquest.data.repository.AgriQuestRepositoryImpl
-import com.agriquest.domain.model.PlantGrowthStage
 import com.agriquest.domain.model.Quest
+import com.agriquest.domain.model.PlantGrowthStage
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,7 +35,7 @@ class QuestsScreenUnitTest {
     @Test
     fun dailyQuests_defaultList_contains3PlantCareQuestsWithDifficultyAndSubtext() {
         val dailyQuests = Quest.DAILY_QUESTS
-        assertEquals(3, dailyQuests.size)
+        assertEquals(13, dailyQuests.size)
 
         // Quest 1: Prune Lower Leaves
         val q1 = dailyQuests[0]
@@ -69,9 +69,10 @@ class QuestsScreenUnitTest {
     }
 
     @Test
-    fun dailyQuests_totalAvailableXp_equals225Xp() {
+    fun dailyQuests_totalAvailableXp_coversFinalStage() {
         val totalAvailableXp = Quest.DAILY_QUESTS.sumOf { it.xpReward }
-        assertEquals(225, totalAvailableXp)
+        assertEquals(1225, totalAvailableXp)
+        assertTrue(totalAvailableXp >= PlantGrowthStage.RIPENING.maxXp)
     }
 
     @Test
@@ -102,7 +103,7 @@ class QuestsScreenUnitTest {
     }
 
     @Test
-    fun completeAll3DailyQuests_awardsTotal225XpAndTriggersStreakIncrement() = runTest {
+    fun completeAllDailyQuests_reachesFinalStageAndTriggersStreakIncrement() = runTest {
         val repo = AgriQuestRepositoryImpl()
         val viewModel = AgriQuestViewModel(repo)
 
@@ -123,15 +124,20 @@ class QuestsScreenUnitTest {
         assertEquals(0, viewModel.uiState.value.plant.streakDays)
         assertEquals(PlantGrowthStage.VEGETATIVE_LEAFY, viewModel.uiState.value.plant.growthStage)
 
-        // Complete Quest 3 (+100 XP) -> Total 225 XP, ALL daily quests done -> streak increments to 1!
+        // The first three tasks earn 225 XP; the ten new tasks complete the set.
         viewModel.claimQuest("quest_stake_stem")
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(225, viewModel.uiState.value.plant.currentXp)
+        assertEquals(0, viewModel.uiState.value.plant.streakDays)
+        Quest.ADDITIONAL_QUESTS.forEach { viewModel.claimQuest(it.id) }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1225, viewModel.uiState.value.plant.currentXp)
+        assertEquals(PlantGrowthStage.RIPENING, viewModel.uiState.value.plant.growthStage)
         assertEquals(1, viewModel.uiState.value.plant.streakDays)
     }
 
     @Test
-    fun simulateNextDay_shuffles3QuestsAndResetsCompletion() = runTest {
+    fun simulateNextDay_resetsAll13Quests() = runTest {
         val repo = AgriQuestRepositoryImpl()
         val viewModel = AgriQuestViewModel(repo)
 
@@ -139,7 +145,7 @@ class QuestsScreenUnitTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val quests = viewModel.uiState.value.quests
-        assertEquals(3, quests.size)
+        assertEquals(13, quests.size)
         assertTrue(quests.all { !it.isClaimed })
     }
 }

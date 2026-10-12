@@ -46,7 +46,6 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun AgriQuestTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Set false to enforce AgriQuest brand design tokens
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

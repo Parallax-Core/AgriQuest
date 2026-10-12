@@ -59,6 +59,19 @@ enum class PlantGrowthStage(
         speechBubble = "Your tomatoes are ripening! Get ready to harvest."
     );
 
+    val displayName: String
+        get() = when (this) {
+            GERMINATION -> "Seed Germination"
+            SEEDLING_SPROUT -> "Seedling"
+            VEGETATIVE_LEAFY -> "Vegetative Growth"
+            FLOWERING -> "Flowering"
+            FRUITING_HARVEST -> "Fruiting"
+            RIPENING -> "Ripening"
+        }
+
+    val stageLabel: String
+        get() = "Stage ${stageLevel + 1} - $displayName"
+
     companion object {
         fun fromLevel(level: Int): PlantGrowthStage {
             return entries[level.coerceIn(0, entries.lastIndex)]

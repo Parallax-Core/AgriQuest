@@ -1,640 +1,168 @@
 package com.agriquest.ui.ai
 
-import android.widget.Toast
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CameraAlt
-import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.agriquest.R
 import com.agriquest.domain.model.AiScanResult
-import com.agriquest.domain.model.TelemetryData
-import com.agriquest.ui.components.AppCard
-import com.agriquest.ui.components.CardTone
-import com.agriquest.ui.components.AppPageTitle
-import com.agriquest.ui.components.AppScreen
-import com.agriquest.ui.components.TelemetryGrid
+import com.agriquest.ui.components.*
 import com.agriquest.ui.state.AgriQuestUiState
-import com.agriquest.ui.theme.AgriQuestTheme
-import com.agriquest.ui.theme.Amber100
-import com.agriquest.ui.theme.Amber50
-import com.agriquest.ui.theme.Amber500
-import com.agriquest.ui.theme.Amber600
-import com.agriquest.ui.theme.AppLayout
-import com.agriquest.ui.theme.AppTextColor
-import com.agriquest.ui.theme.Emerald100
-import com.agriquest.ui.theme.Emerald50
-import com.agriquest.ui.theme.Emerald500
-import com.agriquest.ui.theme.Emerald600
-import com.agriquest.ui.theme.Emerald700
-import com.agriquest.ui.theme.PureWhite
-import com.agriquest.ui.theme.Slate200
-import com.agriquest.ui.theme.Slate500
-import com.agriquest.ui.theme.Slate700
-import com.agriquest.ui.viewmodel.AgriQuestViewModel
-import kotlinx.coroutines.delay
+import com.agriquest.ui.theme.*
 
-/**
-* AI Agro-Assistant Diagnostics Screen for AgriQuest Mobile.
-*
-* Features:
-* 1. Clean serif typography header ("DIAGNOSTICS", "AI Agro-Assistant") with cream background.
-* 2. AI Model Status Bar ("● Offline AI Ready" green chip badge & "PlantNet-Tomato v1.2" muted info tag).
-* 3. Camera Scan Hero Card (Emerald green card, camera icon, "Scan Tomato Leaf", interactive click action opening camera scanner simulation dialog & awarding +25 XP!).
-* 4. Current IoT Conditions Summary Card (2x2 compact grid with Soil Moisture 68% ✓, Temp 24°C ✓, Humidity 62% ⚠, Light 4.2 klux ✓).
-* 5. Recent Scans List Section ("Healthy Leaf" 97% green check badge, "Early Blight" 89% amber warning badge).
-*/
 @Composable
-fun AiDiagnosticsScreen(
-    modifier: Modifier = Modifier,
-    viewModel: AgriQuestViewModel = viewModel(),
-    onTabSelected: (Int) -> Unit = {}
-) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(viewModel) {
-        viewModel.notificationEvents.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            snackbarHostState.showSnackbar(message)
+fun AiDiagnosticsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestUiState = AgriQuestUiState(),
+    selectedTab: Int = 3, onTabSelected: (Int) -> Unit = {}, onPerformScan: () -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }, onAddJournalEntry: (String) -> Unit = {},
+    initialResult: AiScanResult? = null) {
+    var result by remember { mutableStateOf(initialResult) }
+    var camera by remember { mutableStateOf(false) }
+    var previousScanId by remember { mutableStateOf<String?>(null) }
+    var pending by remember { mutableStateOf(false) }
+    var saved by remember { mutableStateOf(false) }
+    val locked = uiState.plant.streakDays < uiState.plant.targetStreakDays
+    LaunchedEffect(uiState.recentScans.firstOrNull()?.id, pending) {
+        val newest = uiState.recentScans.firstOrNull()
+        if (pending && newest != null && newest.id != previousScanId) {
+            result = newest; pending = false; camera = false; saved = false
         }
     }
-
-    AiDiagnosticsScreenContent(
-        modifier = modifier,
-        uiState = uiState,
-        selectedTab = 3,
-        onTabSelected = onTabSelected,
-        onPerformScan = { viewModel.performCameraScan() },
-        snackbarHostState = snackbarHostState
-    )
-}
-
-@Composable
-fun AiDiagnosticsScreenContent(
-    modifier: Modifier = Modifier,
-    uiState: AgriQuestUiState = AgriQuestUiState(),
-    selectedTab: Int = 3,
-    onTabSelected: (Int) -> Unit = {},
-    onPerformScan: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
-) {
-    var showScannerDialog by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    val isLocked = uiState.plant.streakDays < uiState.plant.targetStreakDays
-
-    if (showScannerDialog) {
-        InteractiveLeafScannerDialog(
-            onDismissRequest = { showScannerDialog = false },
-            onScanTriggered = {
-                onPerformScan()
-                showScannerDialog = false
+    AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
+        PixelPageHeader("AI Agro-Assistant", "Diagnostics", uiState)
+        val scan = result
+        if (scan == null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text("Tomato model · Demo", style = MaterialTheme.typography.labelSmall, color = AppAccentBackground)
             }
-        )
-    }
-
-    AppScreen(
-        modifier = modifier,
-        uiState = uiState,
-        selectedTab = selectedTab,
-        onTabSelected = onTabSelected,
-        snackbarHostState = snackbarHostState
-    ) {
-        // 1. Header: "DIAGNOSTICS" subtitle & "AI Agro-Assistant" title in clean serif typography
-        AppCard(Modifier.fillMaxWidth()) {
-            AppPageTitle("AI Agro-Assistant", "Diagnostics", Modifier.padding(AppLayout.cardPadding))
-        }
-
-        Column(
-            modifier = Modifier
-            .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
-        ) {
-            // 2. AI Model Status Bar: "● Offline AI Ready" & "PlantNet-Tomato v1.2"
-            AiModelStatusBar()
-
-            // Lock Banner Overlay when streak < 7
-            if (isLocked) {
-                AppCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(AppLayout.cardPadding),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Amber500,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Lock,
-                                    contentDescription = "Locked",
-                                    tint = PureWhite,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = "🔒 AI Diagnostic Scan Unlocks at 7-Day Streak!",
-                                style = MaterialTheme.typography.titleMedium.copy(color = AppTextColor)
-                            )
-                            Text(
-                                text = "Current streak: ${uiState.plant.streakDays} / ${uiState.plant.targetStreakDays} days",
-                                style = MaterialTheme.typography.bodySmall.copy(color = Amber600)
-                            )
-                        }
-                    }
+            AppCard(tone = CardTone.ACCENT) {
+                Column(Modifier.fillMaxWidth().background(Color(0xFF315B1D)).padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Rounded.CameraAlt, null, Modifier.size(36.dp), tint = PixelPaleGreen)
+                    Text("SCAN TOMATO LEAF", style = MaterialTheme.typography.titleMedium, color = AppCardBackground)
+                    Text(if (locked) "Unlock at a ${uiState.plant.targetStreakDays}-day care streak (${uiState.plant.streakDays}/${uiState.plant.targetStreakDays})."
+                        else "Point your camera at a leaf for a scan preview.", style = MaterialTheme.typography.bodySmall, color = AppCardBackground)
+                    PixelButton(if (locked) "Scan Locked" else "Open Camera", { camera = true },
+                        color = Color(0xFFAF852D), enabled = !locked && !pending)
                 }
             }
-
-            // 3. Camera Scan Hero Card: Emerald green card with camera icon, title, subtitle & click action
-            CameraScanHeroCard(
-                isLocked = isLocked,
-                streakDays = uiState.plant.streakDays,
-                targetStreakDays = uiState.plant.targetStreakDays,
-                onOpenScanner = {
-                    if (isLocked) {
-                        Toast.makeText(
-                            context,
-                            "🔒 AI Diagnostic Scan unlocks at 7-day streak! Current streak: ${uiState.plant.streakDays}/${uiState.plant.targetStreakDays} days",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        showScannerDialog = true
-                    }
-                }
-            )
-
-            // 4. Current IoT Conditions Summary Card: 2x2 compact row grid
-            IotConditionsSummaryCard(
-                telemetry = uiState.telemetry
-            )
-
-            // 5. Recent Scans List Section
-            RecentScansSection(
-                recentScans = uiState.recentScans
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-        }
-
-    }
-}
-
-/**
-* AI Model Status Bar displaying green badge chip "● Offline AI Ready" and muted tag "PlantNet-Tomato v1.2".
-*/
-@Composable
-private fun AiModelStatusBar() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Status badge chip: "● Offline AI Ready" (green chip)
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = Emerald50,
-            border = BorderStroke(1.dp, Emerald100)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Pulse Green Dot
-                Box(
-                    modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(Emerald600)
-                )
-                Text(
-                    text = "Offline AI Ready",
-                    style = MaterialTheme.typography.labelSmall.copy(color = Emerald700)
-                )
+            PixelPanel {
+                PixelHeading("Current IoT Conditions")
+                TelemetryGrid(telemetry = uiState.telemetry, showTitle = false, compact = true, embedded = true)
             }
-        }
-
-        // Model info tag: "PlantNet-Tomato v1.2" (muted text)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Memory,
-                contentDescription = "Model",
-                tint = Slate500,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = "PlantNet-Tomato v1.2",
-                style = MaterialTheme.typography.labelMedium.copy(color = Slate500)
-            )
-        }
-    }
-}
-
-/**
-* Camera Scan Hero Card: Emerald green container card (0xFF059669 / 0xFF10B981) with camera icon,
-* title ("Scan Tomato Leaf"), subtitle ("Point camera at a leaf to detect disease"), and interactive action.
-*/
-@Composable
-private fun CameraScanHeroCard(
-    isLocked: Boolean = false,
-    streakDays: Int = 0,
-    targetStreakDays: Int = 7,
-    onOpenScanner: () -> Unit
-) {
-    AppCard(modifier = Modifier
-        .fillMaxWidth()
-        .clickable { onOpenScanner() }, tone = CardTone.ACCENT) {
-        Box(
-            modifier = Modifier
-            .fillMaxWidth()
-            .padding(AppLayout.cardPadding)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
-            ) {
-                // Camera / Lock Icon Container
-                Surface(
-                    shape = CircleShape,
-                    color = PureWhite.copy(alpha = 0.22f),
-                    modifier = Modifier.size(56.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            imageVector = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.CameraAlt,
-                            contentDescription = if (isLocked) "Locked Scan" else "Camera Scan",
-                            tint = PureWhite,
-                            modifier = Modifier.size(30.dp)
-                        )
+            PixelPanel {
+                PixelHeading("Recent Scans")
+                if (uiState.recentScans.isEmpty()) Text("No scans yet.", style = MaterialTheme.typography.bodySmall)
+                uiState.recentScans.take(5).forEach { history ->
+                    ScanHistoryRow(history) { result = history; saved = false }
+                }
+            }
+        } else {
+            val details = ScanPresentation.from(scan)
+            LeafScanPreview(details)
+            PixelPanel {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(if (scan.isHealthy) Icons.Rounded.CheckCircle else Icons.Rounded.Warning, null,
+                        Modifier.size(32.dp), tint = details.color)
+                    Column(Modifier.weight(1f)) {
+                        Text(scan.title.uppercase(), style = MaterialTheme.typography.titleMedium, color = details.color)
+                        Text(details.subtitle, style = MaterialTheme.typography.labelSmall, color = AppTextColor)
                     }
+                    PixelChip("${scan.confidence} sure", details.chipColor, details.color)
                 }
-
-                // Text details
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = if (isLocked) "Scan Locked (Requires 7-Day Streak)" else "Scan Tomato Leaf",
-                        style = MaterialTheme.typography.titleMedium.copy(color = PureWhite)
-                    )
-                    Text(
-                        text = if (isLocked) "Current streak: $streakDays / $targetStreakDays days" else "Point camera at a leaf to detect disease",
-                        style = MaterialTheme.typography.bodyMedium.copy(color = PureWhite.copy(alpha = 0.9f))
-                    )
+                HorizontalDivider(color = AppCardBorder)
+                PixelHeading("What We Found")
+                Text(details.findings, style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+                PixelHeading("What To Do")
+                details.actions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PixelButton("Scan Again", { result = null }, Modifier.weight(1f), color = PixelGreen)
+                    PixelButton(if (saved) "✓ Saved" else "+ Add to Journal", {
+                        onAddJournalEntry("AI scan: ${scan.title} (${scan.confidence}). ${details.findings}")
+                        saved = true
+                    }, Modifier.weight(1f), color = details.color, enabled = !saved)
                 }
-
-                // Small Action Arrow / XP pill
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = PureWhite,
-                    modifier = Modifier.align(Alignment.CenterVertically)
-                ) {
-                    Text(
-                        text = if (isLocked) "🔒 Locked" else "+25 XP",
-                        style = MaterialTheme.typography.labelMedium.copy(color = if (isLocked) Slate700 else Emerald700),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
+            }
+            PixelPanel {
+                TelemetryGrid(telemetry = uiState.telemetry, showTitle = false, compact = true, embedded = true)
             }
         }
     }
-}
-
-/**
-* Current IoT Conditions Summary Card:
-* Title "Current IoT Conditions" and 2x2 compact row grid showing:
-* - Soil Moisture: 68% ✓
-* - Temperature: 24°C ✓
-* - Humidity: 62% ⚠ (Amber warning icon)
-* - Light: 4.2 klux ✓
-*/
-@Composable
-private fun IotConditionsSummaryCard(telemetry: TelemetryData) {
-    TelemetryGrid(telemetry = telemetry)
-}
-
-/**
-* Compact tile representation for individual IoT sensor condition.
-*/
-
-/**
-* Recent Scans List Section displaying section title "Recent Scans" and scan cards:
-* 1. "Healthy Leaf", "Leaf 4 (middle branch) • Sep 12 - 2:14 PM", "97%" (green check badge)
-* 2. "Early Blight", "Leaf 7 (lower) • Sep 10 - 11:02 AM", "89%" (amber warning badge)
-*/
-@Composable
-private fun RecentScansSection(
-    recentScans: List<AiScanResult>
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
-    ) {
-        Text(
-            text = "Recent Scans",
-            style = MaterialTheme.typography.titleMedium.copy(color = AppTextColor)
-        )
-
-        recentScans.forEach { scan ->
-            ScanResultCard(scan = scan)
+    if (camera) Dialog(onDismissRequest = { if (!pending) camera = false }) {
+        PixelPanel {
+            PixelHeading("Camera Preview")
+            LeafScanPreview(ScanPresentation.from(AiScanResult("preview", "Healthy Leaf", "", "", true)))
+            Text("Demo scan preview. This build simulates the diagnosis; it does not analyze a camera image.",
+                style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+            if (pending) LinearProgressIndicator(Modifier.fillMaxWidth())
+            PixelButton(if (pending) "Scanning…" else "Run Demo Scan", {
+                previousScanId = uiState.recentScans.firstOrNull()?.id; pending = true; onPerformScan()
+            }, Modifier.fillMaxWidth(), enabled = !pending)
+            TextButton({ camera = false; pending = false }) { Text("Cancel") }
         }
     }
 }
 
-/**
-* Individual Scan Result Card displaying title, subtext, confidence tag, and green check or amber warning badge.
-*/
 @Composable
-private fun ScanResultCard(
-    scan: AiScanResult
-) {
-    AppCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-            .fillMaxWidth()
-            .padding(AppLayout.cardPadding),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = scan.title,
-                    style = MaterialTheme.typography.titleMedium.copy(color = AppTextColor)
-                )
-                Text(
-                    text = scan.subtext,
-                    style = MaterialTheme.typography.bodySmall.copy(color = Slate500)
-                )
+private fun ScanHistoryRow(scan: AiScanResult, onClick: () -> Unit) {
+    val details = ScanPresentation.from(scan)
+    Surface(Modifier.fillMaxWidth().clickable(onClick = onClick), color = PixelTan,
+        shape = RoundedCornerShape(3.dp), border = BorderStroke(1.dp, AppCardBorder)) {
+        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(if (scan.isHealthy) Icons.Rounded.CheckCircle else Icons.Rounded.Warning, null, tint = details.color)
+            Column(Modifier.weight(1f)) {
+                Text(scan.title, style = MaterialTheme.typography.labelLarge, color = AppTextColor)
+                Text(scan.subtext, style = MaterialTheme.typography.labelSmall, color = AppTextColor)
             }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Confidence Tag Badge Chip
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = if (scan.isHealthy) Emerald50 else Amber50,
-                border = BorderStroke(1.dp, if (scan.isHealthy) Emerald100 else Amber100)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = if (scan.isHealthy) Icons.Rounded.CheckCircle else Icons.Rounded.Warning,
-                        contentDescription = if (scan.isHealthy) "Healthy Check" else "Warning Badge",
-                        tint = if (scan.isHealthy) Emerald600 else Amber600,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = scan.confidence,
-                        style = MaterialTheme.typography.labelSmall.copy(color = if (scan.isHealthy) Emerald700 else Amber600)
-                    )
-                }
-            }
+            PixelChip("${scan.confidence} sure", details.chipColor, details.color)
         }
     }
 }
 
-/**
-* Interactive Leaf Scanner Simulation Dialog simulating live camera viewfinder scan.
-*/
+/** Uses the supplied capture frame and the exact artwork for each diagnosis. */
 @Composable
-private fun InteractiveLeafScannerDialog(
-    onDismissRequest: () -> Unit,
-    onScanTriggered: () -> Unit
-) {
-    var scanStatusText by remember { mutableStateOf("Positioning camera over leaf...") }
-    var isScanning by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isScanning) {
-        if (isScanning) {
-            scanStatusText = "Analyzing leaf texture with PlantNet-Tomato v1.2..."
-            delay(1200L)
-            scanStatusText = "Inference complete! Processing health score..."
-            delay(500L)
-            onScanTriggered()
-        }
-    }
-
-    Dialog(onDismissRequest = onDismissRequest) {
-        AppCard(modifier = Modifier
-            .fillMaxWidth()
-            .padding(AppLayout.cardPadding)) {
-            Column(
-                modifier = Modifier
-                .fillMaxWidth()
-                .padding(AppLayout.cardPadding),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(AppLayout.sectionSpacing)
-            ) {
-                // Dialog Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CenterFocusStrong,
-                            contentDescription = "Scanner",
-                            tint = Emerald500,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "AI Leaf Scanner",
-                            style = MaterialTheme.typography.titleMedium.copy(color = PureWhite)
-                        )
-                    }
-
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = "Close",
-                        tint = Slate500,
-                        modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .clickable { onDismissRequest() }
-                    )
-                }
-
-                // Camera Viewfinder Simulation Box
-                val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                val pulseScale by infiniteTransition.animateFloat(
-                    initialValue = 0.95f,
-                    targetValue = 1.05f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(800, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "scale"
-                )
-
-                Box(
-                    modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF0F172A))
-                    .border(1.dp, Emerald500.copy(alpha = 0.5f), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Viewfinder Target Box
-                    Box(
-                        modifier = Modifier
-                        .size(130.dp)
-                        .scale(if (isScanning) pulseScale else 1.0f)
-                        .border(2.dp, Emerald500, RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CameraAlt,
-                            contentDescription = "Target Leaf",
-                            tint = Emerald500.copy(alpha = 0.8f),
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
-
-                    // Model Badge
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = Color.Black.copy(alpha = 0.6f),
-                        modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(AppLayout.cardPadding)
-                    ) {
-                        Text(
-                            text = "PlantNet-Tomato v1.2",
-                            style = MaterialTheme.typography.labelSmall.copy(color = Emerald500),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                // Scan Status Text
-                Text(
-                    text = scanStatusText,
-                    style = MaterialTheme.typography.bodyMedium.copy(color = Slate200)
-                )
-
-                // Trigger Button
-                Button(
-                    onClick = { isScanning = true },
-                    enabled = !isScanning,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Emerald600,
-                        disabledContainerColor = Emerald700.copy(alpha = 0.6f)
-                    ),
-                    shape = AppLayout.buttonShape,
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                    modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CameraAlt,
-                            contentDescription = "Scan",
-                            tint = PureWhite,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = if (isScanning) "Scanning Leaf..." else "Run Diagnostic Scan (+25 XP)",
-                            style = MaterialTheme.typography.labelLarge.copy(color = PureWhite)
-                        )
-                    }
-                }
-            }
-        }
+private fun LeafScanPreview(details: ScanPresentation) {
+    Box(Modifier.fillMaxWidth().aspectRatio(396f / 150f), contentAlignment = Alignment.Center) {
+        Image(painterResource(R.drawable.camera_capture), contentDescription = null,
+            modifier = Modifier.matchParentSize(), contentScale = ContentScale.FillBounds)
+        val artwork = details.artwork
+        if (artwork != null) Image(painterResource(artwork), contentDescription = details.title,
+            modifier = Modifier.fillMaxHeight(.8f).aspectRatio(1f).padding(bottom = 12.dp),
+            contentScale = ContentScale.Fit)
+        else Icon(Icons.Rounded.CameraAlt, details.title, Modifier.size(48.dp), tint = PixelPaleGreen)
     }
 }
 
-@Preview(showBackground = true, device = "spec:width=411dp,height=891dp")
+@Preview(name = "AI — Healthy Result", widthDp = 393, heightDp = 852)
 @Composable
-fun AiDiagnosticsScreenPreview() {
-    AgriQuestTheme {
-        AiDiagnosticsScreenContent()
-    }
+private fun HealthyResultPreview() {
+    AgriQuestTheme { AiDiagnosticsScreenContent(initialResult = AiScanResult("preview", "Healthy Leaf", "", "97%")) }
+}
+
+@Preview(name = "AI — Early Blight Result", widthDp = 393, heightDp = 852)
+@Composable
+private fun EarlyBlightResultPreview() {
+    AgriQuestTheme { AiDiagnosticsScreenContent(initialResult = AiScanResult("preview", "Early Blight", "", "84%", false)) }
+}
+
+@Preview(name = "AI — Bacterial Spot Result", widthDp = 393, heightDp = 852)
+@Composable
+private fun BacterialSpotResultPreview() {
+    AgriQuestTheme { AiDiagnosticsScreenContent(initialResult = AiScanResult("preview", "Bacterial Spot", "", "91%", false)) }
 }

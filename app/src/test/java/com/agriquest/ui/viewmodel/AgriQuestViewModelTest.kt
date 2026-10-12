@@ -3,6 +3,7 @@ package com.agriquest.ui.viewmodel
 import com.agriquest.data.repository.AgriQuestRepositoryImpl
 import com.agriquest.domain.model.ConnectionStatus
 import com.agriquest.domain.model.FanMode
+import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.PlantGrowthStage
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.TelemetryData
@@ -99,12 +100,16 @@ class AgriQuestViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(0, viewModel.uiState.value.plant.streakDays)
 
-        // Claim Quest 3 (+100 XP) - ALL daily quests complete -> streak increments to 1 & celebration toast emitted!
+        // Claim the original third task and the ten additional tasks to complete the day.
         viewModel.claimQuest("quest_stake_stem")
         testDispatcher.scheduler.advanceUntilIdle()
 
+        assertEquals(225, viewModel.uiState.value.plant.currentXp)
+        assertEquals(0, viewModel.uiState.value.plant.streakDays)
+        Quest.ADDITIONAL_QUESTS.forEach { viewModel.claimQuest(it.id) }
+        testDispatcher.scheduler.advanceUntilIdle()
         val finalState = viewModel.uiState.value
-        assertEquals(225, finalState.plant.currentXp)
+        assertEquals(1225, finalState.plant.currentXp)
         assertEquals(1, finalState.plant.streakDays)
         assertTrue(notifications.last().contains("🎉 All Daily Quests Completed! Care Streak: 1 / 7 Days 🔥"))
 
@@ -126,7 +131,7 @@ class AgriQuestViewModelTest {
         viewModel.simulateNextDay()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(3, viewModel.uiState.value.quests.size)
+        assertEquals(13, viewModel.uiState.value.quests.size)
         assertTrue(notification?.contains("🌅 Next Day Simulated!") == true)
 
         job.cancel()

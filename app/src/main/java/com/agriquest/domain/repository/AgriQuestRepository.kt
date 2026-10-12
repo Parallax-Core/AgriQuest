@@ -68,9 +68,9 @@ interface AgriQuestRepository {
     suspend fun claimQuest(questId: String): Boolean
 
     /**
-     * Shuffles 3 random quests from the quest pool, resets their completion status,
+     * Rotates three tasks, includes the ten additional tasks, and resets completion status,
      * and updates the daily quests list.
-     * @return the newly selected 3 daily quests.
+     * @return the 13 available daily quests.
      */
     suspend fun resetDailyQuests(): List<Quest>
 

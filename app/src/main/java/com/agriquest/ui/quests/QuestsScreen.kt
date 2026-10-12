@@ -1,6 +1,5 @@
 package com.agriquest.ui.quests
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,65 +25,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agriquest.domain.model.Quest
 import com.agriquest.ui.components.AppCard
 import com.agriquest.ui.components.AppScreen
 import com.agriquest.ui.components.AppText
 import com.agriquest.ui.components.CardTone
 import com.agriquest.ui.components.DailyQuizCard
+import com.agriquest.ui.components.PixelPageHeader
+import com.agriquest.ui.components.PixelPanel
 import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.theme.AppLayout
 import com.agriquest.ui.theme.AppTextColor
-import com.agriquest.ui.viewmodel.AgriQuestViewModel
-import kotlinx.coroutines.launch
-
-@Composable
-fun QuestsScreen(
-    modifier: Modifier = Modifier,
-    viewModel: AgriQuestViewModel = viewModel(),
-    onTabSelected: (Int) -> Unit = {}
-) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-
-    // Listen for notification side effects (e.g. quest completed, +XP awarded, level-up)
-    LaunchedEffect(viewModel) {
-        viewModel.notificationEvents.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            snackbarHostState.showSnackbar(message)
-        }
-    }
-
-    QuestsScreenContent(
-        modifier = modifier,
-        uiState = uiState,
-        selectedTab = 2,
-        onTabSelected = onTabSelected,
-        onCompleteQuest = { questId -> viewModel.claimQuest(questId) },
-        onSimulateNextDay = { viewModel.simulateNextDay() },
-        onAnswerQuiz = { optionIndex ->
-            coroutineScope.launch { viewModel.submitQuizAnswer(optionIndex) }
-        },
-        onNextQuizQuestion = { viewModel.nextQuizQuestion() },
-        snackbarHostState = snackbarHostState
-    )
-}
 
 @Composable
 fun QuestsScreenContent(
@@ -93,7 +52,6 @@ fun QuestsScreenContent(
     selectedTab: Int = 2,
     onTabSelected: (Int) -> Unit = {},
     onCompleteQuest: (String) -> Unit = {},
-    onSimulateNextDay: () -> Unit = {},
     onAnswerQuiz: (Int) -> Unit = {},
     onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
@@ -105,6 +63,7 @@ fun QuestsScreenContent(
         onTabSelected = onTabSelected,
         snackbarHostState = snackbarHostState
     ) {
+        PixelPageHeader("Quests", "Daily", uiState)
         AvailableXpBanner(uiState)
         Row(
             Modifier.fillMaxWidth(),
@@ -124,6 +83,7 @@ fun QuestsScreenContent(
             }
         }
         uiState.quests.forEach { quest -> PlantCareQuestCard(quest, onCompleteQuest) }
+        GreenThumbPanel(uiState)
         DailyQuizCard(
             question = uiState.currentQuizQuestion,
             isQuizCompletedToday = uiState.isQuizCompletedToday,
@@ -132,13 +92,17 @@ fun QuestsScreenContent(
             onAnswerSelected = onAnswerQuiz,
             onNextQuestion = onNextQuizQuestion
         )
-        GreenThumbPanel(uiState)
-        androidx.compose.material3.OutlinedButton(
-            onClick = onSimulateNextDay,
-            modifier = Modifier.fillMaxWidth(),
-            shape = AppLayout.buttonShape,
-            border = BorderStroke(1.dp, Color(0xFFC9A86A))
-        ) { AppText("Simulate Next Day", style = MaterialTheme.typography.bodySmall) }
+
+        PixelPanel(tone = CardTone.ACCENT) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                AppText("★ Quiz Rewards", heading = true, color = Color(0xFFFFDF6D),
+                    style = MaterialTheme.typography.titleMedium)
+                AppText("+${uiState.currentQuizQuestion.xpReward} XP / answer", color = Color(0xFFFFF5D9),
+                    style = MaterialTheme.typography.labelSmall)
+            }
+            AppText("Answer correctly to earn XP and grow your plant knowledge.", color = Color(0xFFADC3C8),
+                style = MaterialTheme.typography.bodySmall, weight = FontWeight.SemiBold)
+        }
 
     }
 }
@@ -209,7 +173,7 @@ private fun PlantCareQuestCard(quest: Quest, onCompleteQuest: (String) -> Unit) 
                         AppText(quest.xpRewardText, Modifier.padding(horizontal = 10.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
                     }
                 }
-                AppText(quest.subtext, color = AppTextColor, style = MaterialTheme.typography.bodySmall, weight = FontWeight.Bold)
+                AppText(quest.subtext, color = AppTextColor, style = MaterialTheme.typography.bodySmall, weight = FontWeight.SemiBold)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     QuestProgress(if (done) 1f else quest.progress,
@@ -219,7 +183,7 @@ private fun PlantCareQuestCard(quest: Quest, onCompleteQuest: (String) -> Unit) 
                 }
                 if (done) {
                     Surface(modifier = Modifier.align(Alignment.End).height(22.4.dp),
-                        color = Color(0xFFE3EBB0), shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFE3EBB0), shape = RoundedCornerShape(3.dp),
                         border = BorderStroke(1.dp, Color(0xFFA9B666))) {
                         Box(Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
                             AppText("✓ Completed", color = Color(0xFF32651D), style = MaterialTheme.typography.labelMedium)
@@ -228,7 +192,7 @@ private fun PlantCareQuestCard(quest: Quest, onCompleteQuest: (String) -> Unit) 
                 } else {
                     Button(
                         onClick = { onCompleteQuest(quest.id) },
-                        modifier = Modifier.align(Alignment.End).height(32.dp),
+                        modifier = Modifier.align(Alignment.End).height(30.dp),
                         shape = AppLayout.buttonShape,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF193F4E)),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)

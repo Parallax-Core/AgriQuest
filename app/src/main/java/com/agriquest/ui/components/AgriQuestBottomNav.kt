@@ -117,16 +117,16 @@ fun AgriQuestBottomNav(
                                 NavigationTabImage(tab, isSelected, selectedImageColor)
                             }
                         },
-                        label = if (tab.drawableRes == null) {
-                            {
-                                Text(
-                                    text = tab.title,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = if (isSelected) selectedImageColor else unselectedIconColor
-                                    )
+                        label = {
+                            Text(
+                                text = tab.title,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    color = if (isSelected) selectedImageColor else unselectedIconColor
                                 )
-                            }
-                        } else null,
+                            )
+                        },
+                        alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = selectedImageColor,
                             selectedTextColor = selectedImageColor,

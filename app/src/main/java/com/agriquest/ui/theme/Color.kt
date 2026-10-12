@@ -31,12 +31,11 @@ val Amber600 = Color(0xFFD97706)
 // Task Design Tokens: Surface / Container Cards
 val PureWhite = Color(0xFFFFFFFF)  // Container / Card Surfaces
 
-val HomeContainer = Color(0xFFFAEDCB)  // Home dashboard card surfaces
-
 // Shared palette based on the Quests page.
-val AppPageBackground = Color(0xFFFFF9E9)
+val AppPageBackground = Color(0xFF55B2D2)
+val GardenBorder = Color(0xFF397D83)
 val AppCardBackground = Color(0xFFFFF5D9)
-val AppCardBorder = Color(0xFFC9A86A)
-val AppTextColor = Color(0xFF68451F)
+val AppCardBorder = Color(0xFFB68E64)
+val AppTextColor = Color(0xFF4A321D)
 val AppAccentBackground = Color(0xFF193F4E)
 val AppHighlightBackground = Color(0xFFFFDF6D)

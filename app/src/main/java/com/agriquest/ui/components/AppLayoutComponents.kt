@@ -60,6 +60,7 @@ fun AppScreen(
         }
     ) { insets ->
         Box(Modifier.fillMaxSize().padding(insets), contentAlignment = Alignment.TopCenter) {
+            GardenBackground(Modifier.matchParentSize())
             Column(
                 modifier = Modifier.widthIn(max = AppLayout.maxWidth).fillMaxWidth()
                 .verticalScroll(rememberScrollState()).padding(AppLayout.pagePadding),
@@ -79,7 +80,7 @@ fun AppCard(
 ) {
     Card(
         modifier = modifier,
-        shape = AppLayout.cardShape,
+        shape = if (tone == CardTone.HIGHLIGHT) AppLayout.highlightShape else AppLayout.cardShape,
         colors = CardDefaults.cardColors(
             containerColor = when (tone) {
                 CardTone.DEFAULT -> AppCardBackground

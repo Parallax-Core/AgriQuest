@@ -114,13 +114,13 @@ class DomainModelsTest {
         assertEquals(100, quest.progressPercent)
 
         val defaultQuests = Quest.DEFAULT_QUESTS
-        assertEquals(3, defaultQuests.size)
+        assertEquals(13, defaultQuests.size)
         assertEquals("quest_prune_leaves", defaultQuests[0].id)
         assertEquals("quest_deep_watering", defaultQuests[1].id)
         assertEquals("quest_stake_stem", defaultQuests[2].id)
 
         val dailyQuests = Quest.DAILY_QUESTS
-        assertEquals(3, dailyQuests.size)
+        assertEquals(13, dailyQuests.size)
         assertEquals("quest_prune_leaves", dailyQuests[0].id)
         assertEquals("quest_deep_watering", dailyQuests[1].id)
         assertEquals("quest_stake_stem", dailyQuests[2].id)

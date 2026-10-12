@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agriquest.R
 import com.agriquest.ui.theme.AgriQuestTheme
+import com.agriquest.ui.theme.scaledTextSize
 
 /**
  * Splash Screen & Start Screen for AgriQuest Mobile.
@@ -133,7 +134,7 @@ fun SplashScreen(
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = scaledTextSize(11),
                             color = Color(0xFF86EFAC),
                             letterSpacing = 1.sp
                         )

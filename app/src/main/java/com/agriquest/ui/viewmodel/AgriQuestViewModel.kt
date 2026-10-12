@@ -100,7 +100,6 @@ class AgriQuestViewModel(
     init {
         repository.resetQuizState()
         checkAndResetMidnightQuests()
-        repository.resetQuizState()
     }
 
     /**
@@ -145,12 +144,12 @@ class AgriQuestViewModel(
     }
 
     /**
-     * Action to simulate next day, shuffling and resetting 3 random daily quests from quest pool.
+     * Action to simulate next day, rotating three quests and resetting all 13 daily tasks.
      */
     fun simulateNextDay() {
         viewModelScope.launch {
-            repository.resetDailyQuests()
-            _notificationEvents.emit("🌅 Next Day Simulated! 3 New Daily Quests Available!")
+            val quests = repository.resetDailyQuests()
+            _notificationEvents.emit("🌅 Next Day Simulated! ${quests.size} Daily Quests Available!")
         }
     }
 

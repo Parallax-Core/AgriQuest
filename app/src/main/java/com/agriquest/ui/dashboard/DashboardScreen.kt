@@ -1,10 +1,11 @@
-
 package com.agriquest.ui.dashboard
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -13,30 +14,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agriquest.domain.model.ConnectionStatus
+import com.agriquest.domain.model.JournalCategory
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.ui.ai.AiDiagnosticsScreenContent
 import com.agriquest.ui.awards.AwardsScreenContent
-import com.agriquest.ui.components.ActuatorControlsCard
-import com.agriquest.ui.components.AppScreen
-import com.agriquest.ui.components.DailyQuestsDashboardSection
-import com.agriquest.ui.components.DailyQuizCard
-import com.agriquest.ui.components.Esp32HardwareSetupDialog
-import com.agriquest.ui.components.PlantAvatarHeroCard
-import com.agriquest.ui.components.PlantStagesCard
-import com.agriquest.ui.components.QuestBanner
-import com.agriquest.ui.components.TelemetryGrid
-import com.agriquest.ui.components.TopLevelBanner
+import com.agriquest.ui.components.*
 import com.agriquest.ui.plant.PlantDetailsScreenContent
 import com.agriquest.ui.quests.QuestsScreenContent
 import com.agriquest.ui.state.AgriQuestUiState
-import com.agriquest.ui.theme.AgriQuestTheme
+import com.agriquest.ui.theme.*
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import kotlinx.coroutines.launch
 
@@ -86,13 +81,7 @@ fun DashboardScreen(
         modifier = modifier,
         uiState = uiState,
         selectedTab = selectedTab,
-        onTabSelected = { tabIndex ->
-            if (tabIndex == 3 && uiState.plant.streakDays < uiState.plant.targetStreakDays) {
-                val message = "🔒 AI Diagnostic Scan unlocks at 7-day streak! Current streak: ${uiState.plant.streakDays}/${uiState.plant.targetStreakDays} days."
-                viewModel.showNotification(message)
-            }
-            selectedTab = tabIndex
-        },
+        onTabSelected = { selectedTab = it },
         onPlantSourceSelected = { source ->
             viewModel.setPlantSource(source)
             if (source == PlantSource.ESP32_HARDWARE) {
@@ -100,14 +89,12 @@ fun DashboardScreen(
             }
         },
         onClaimQuest = { questId -> viewModel.claimQuest(questId) },
-        onSimulateNextDay = { viewModel.simulateNextDay() },
-        onTriggerPump = { viewModel.triggerPump(3) },
-        onToggleFanMode = { viewModel.toggleFanMode() },
         onScanForEsp32 = {
             showEsp32SetupDialog = true
             viewModel.startEsp32BleScan()
         },
         onPerformScan = { viewModel.performCameraScan() },
+        onAddJournalEntry = { note -> viewModel.addJournalEntry(note, JournalCategory.GENERAL) },
         onResetStreak = { viewModel.resetStreak() },
         onAnswerQuiz = { optionIndex ->
             coroutineScope.launch { viewModel.submitQuizAnswer(optionIndex) }
@@ -133,11 +120,9 @@ fun DashboardScreenContent(
     onTabSelected: (Int) -> Unit = {},
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
-    onSimulateNextDay: () -> Unit = {},
-    onTriggerPump: () -> Unit = {},
-    onToggleFanMode: () -> Unit = {},
     onScanForEsp32: () -> Unit = {},
     onPerformScan: () -> Unit = {},
+    onAddJournalEntry: (String) -> Unit = {},
     onResetStreak: () -> Unit = {},
     onAnswerQuiz: (Int) -> Unit = {},
     onNextQuizQuestion: () -> Unit = {},
@@ -149,7 +134,7 @@ fun DashboardScreenContent(
             uiState = uiState,
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
-            onBackClick = { onTabSelected(0) },
+            onAddJournalEntry = onAddJournalEntry,
             snackbarHostState = snackbarHostState
         )
         2 -> QuestsScreenContent(
@@ -158,7 +143,6 @@ fun DashboardScreenContent(
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
             onCompleteQuest = onClaimQuest,
-            onSimulateNextDay = onSimulateNextDay,
             onAnswerQuiz = onAnswerQuiz,
             onNextQuizQuestion = onNextQuizQuestion,
             snackbarHostState = snackbarHostState
@@ -169,6 +153,7 @@ fun DashboardScreenContent(
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
             onPerformScan = onPerformScan,
+            onAddJournalEntry = onAddJournalEntry,
             snackbarHostState = snackbarHostState
         )
         4 -> AwardsScreenContent(
@@ -186,20 +171,13 @@ fun DashboardScreenContent(
             onTabSelected = onTabSelected,
             onPlantSourceSelected = onPlantSourceSelected,
             onClaimQuest = onClaimQuest,
-            onTriggerPump = onTriggerPump,
-            onToggleFanMode = onToggleFanMode,
             onScanForEsp32 = onScanForEsp32,
-            onAnswerQuiz = onAnswerQuiz,
-            onNextQuizQuestion = onNextQuizQuestion,
             snackbarHostState = snackbarHostState
         )
     }
 }
 
-/**
- * Tab 0: Home Dashboard Content displaying TopLevelBanner, PlantAvatarHeroCard,
- * TelemetryGrid, PlantStagesCard, DailyQuestsDashboardSection, QuestBanner, and ActuatorControlsCard.
- */
+/** Home plant scene and daily overview. */
 @Composable
 fun HomeDashboardContent(
     modifier: Modifier = Modifier,
@@ -208,86 +186,69 @@ fun HomeDashboardContent(
     onTabSelected: (Int) -> Unit = {},
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
-    onTriggerPump: () -> Unit = {},
-    onToggleFanMode: () -> Unit = {},
     onScanForEsp32: () -> Unit = {},
-    onAnswerQuiz: (Int) -> Unit = {},
-    onNextQuizQuestion: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
-    AppScreen(
-        modifier = modifier,
-        uiState = uiState,
-        selectedTab = selectedTab,
-        onTabSelected = onTabSelected,
-        snackbarHostState = snackbarHostState
-    ) {
-        // 1. Top Level Banner (Sky Blue Header)
-        TopLevelBanner(
-            userLevel = uiState.plant.level,
-            userLevelInt = uiState.plant.levelInt,
-            currentXp = uiState.plant.currentXp,
-            maxXp = uiState.plant.maxXp,
-            streakDays = uiState.plant.streakDays,
-            targetStreakDays = uiState.plant.targetStreakDays,
-            speechBubble = uiState.plant.speechBubble,
-            connectionState = uiState.connection,
-            selectedPlantSource = uiState.plantSource,
-            onPlantSourceSelected = onPlantSourceSelected,
-            onScanForEsp32 = onScanForEsp32
-        )
-
-        // 2. Digital Twin / Plant Avatar Hero Card + Active Floating Moodles
-        PlantAvatarHeroCard(
-            plant = uiState.plant,
-            activeMoodles = uiState.activeMoodles
-        )
-
-        // 3. Environment Conditions Section (4 Real-Time Telemetry Cards)
-        TelemetryGrid(
-            telemetry = uiState.telemetry
-        )
-
-        // 4. Plant Stages Timeline Section
-        PlantStagesCard(
-            currentStage = uiState.plant.growthStage,
-            onViewMoreClick = { onTabSelected(1) }
-        )
-
-        // 5. Daily Agro-Quiz Card
-        DailyQuizCard(
-            question = uiState.currentQuizQuestion,
-            isQuizCompletedToday = uiState.isQuizCompletedToday,
-            selectedOptionIndex = uiState.selectedQuizOptionIndex,
-            isAnswerCorrect = uiState.isQuizAnswerCorrect,
-            onAnswerSelected = onAnswerQuiz,
-            onNextQuestion = onNextQuizQuestion
-        )
-
-        // 6. Daily Quests Section
-        DailyQuestsDashboardSection(
-            quests = uiState.quests,
-            onClaimQuest = onClaimQuest,
-            onViewAllQuestsClick = { onTabSelected(2) }
-        )
-
-        // 7. Active Quest Banner
-        QuestBanner(
-            quest = uiState.activeQuest,
-            quests = uiState.quests,
-            onClaimQuest = onClaimQuest
-        )
-
-        // 8. Controls Section (2 Dark Teal/Blue Buttons)
-        ActuatorControlsCard(
-            actuatorState = uiState.actuator,
-            onTriggerPump = onTriggerPump,
-            onToggleFanMode = onToggleFanMode
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-}
+    var showSourceSettings by remember { mutableStateOf(false) }
+    AppScreen(modifier = modifier, uiState = uiState, selectedTab = selectedTab,
+        onTabSelected = onTabSelected, snackbarHostState = snackbarHostState) {
+        Box(Modifier.fillMaxWidth().height(300.dp)
+            .clip(AppLayout.plantBackgroundShape)
+            .border(AppLayout.cardBorderWidth, GardenBorder, AppLayout.plantBackgroundShape)) {
+            GardenBackground(Modifier.matchParentSize())
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                PixelChip(uiState.plant.growthStage.stageLabel)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = { showSourceSettings = true }) {
+                        Icon(Icons.Rounded.Settings, "Plant connection settings", tint = AppAccentBackground)
+                    }
+                    if (uiState.plantSource == PlantSource.ESP32_HARDWARE) {
+                        PixelChip("ESP32: " + uiState.connection.statusText)
+                    }
+                }
+            }
+            PlantAvatarCanvas(growthStage = uiState.plant.growthStage, size = 245.dp,
+                modifier = Modifier.align(Alignment.BottomCenter))
+        }
+        PixelPanel {
+            PlantLevelBar(uiState)
+            HorizontalDivider(color = AppCardBorder)
+            TelemetryGrid(telemetry = uiState.telemetry, compact = true, embedded = true)
+            HorizontalDivider(color = AppCardBorder)
+            PixelHeading("Tomato Stages")
+            PlantStagesTimeline(uiState.plant.growthStage)
+            HorizontalDivider(color = AppCardBorder)
+            PixelHeading("Today's Quests", trailing = {
+                PixelChip("${uiState.quests.count { it.isClaimed }}/${uiState.quests.size} Completed")
+            })
+            Text("Complete your daily plant care tasks", style = MaterialTheme.typography.labelSmall, color = AppTextColor)
+            uiState.quests.take(3).forEach { quest ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(quest.isClaimed, onCheckedChange = { if (!quest.isClaimed && quest.isClaimable) onClaimQuest(quest.id) },
+                        enabled = quest.isClaimed || quest.isClaimable)
+                    Text(quest.title, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+                    Text(quest.xpRewardText, style = MaterialTheme.typography.labelMedium, color = PixelGreen)
+                }
+            }
+            PixelButton("View More →", { onTabSelected(2) }, Modifier.align(Alignment.End))
+        }
+    }
+    if (showSourceSettings) AlertDialog(
+        onDismissRequest = { showSourceSettings = false },
+        title = { Text("Plant source") },
+        text = {
+            Column {
+                PlantSource.entries.forEach { source ->
+                    TextButton(onClick = { showSourceSettings = false; onPlantSourceSelected(source) }) {
+                        Text(source.displayName)
+                    }
+                }
+                if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
+                    TextButton(onClick = { showSourceSettings = false; onScanForEsp32() }) { Text("Connect ESP32") }
+            }
+        },
+        confirmButton = { TextButton({ showSourceSettings = false }) { Text("Done") } }
+    )
 }
 
 @Preview(showBackground = true, device = "spec:width=411dp,height=891dp")

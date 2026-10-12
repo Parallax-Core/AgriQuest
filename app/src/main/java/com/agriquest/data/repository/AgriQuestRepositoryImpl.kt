@@ -343,7 +343,8 @@ class AgriQuestRepositoryImpl(
     }
 
     override suspend fun resetDailyQuests(): List<Quest> {
-        val newDailyQuests = Quest.QUEST_POOL.shuffled().take(3).map { q ->
+        val newDailyQuests = (Quest.ROTATING_QUEST_POOL.shuffled().take(Quest.ROTATING_DAILY_COUNT) +
+            Quest.ADDITIONAL_QUESTS).map { q ->
             q.copy(
                 progress = 1.0f,
                 isClaimed = false,

@@ -39,10 +39,10 @@ data class Quest(
         get() = (progress * 100).toInt().coerceIn(0, 100)
 
     companion object {
-        /**
-         * Rich pool of 8+ agricultural quests for daily rotation and shuffle.
-         */
-        val QUEST_POOL = listOf(
+        const val ROTATING_DAILY_COUNT = 3
+
+        /** Existing tasks rotate daily; the ten additional tasks are always available. */
+        val ROTATING_QUEST_POOL = listOf(
             Quest(
                 id = "quest_prune_leaves",
                 title = "Prune Lower Leaves",
@@ -133,7 +133,40 @@ data class Quest(
             )
         )
 
-        val DAILY_QUESTS = QUEST_POOL.take(3)
+        private fun careQuest(id: String, title: String, xp: Int, description: String) = Quest(
+            id = id,
+            title = title,
+            xpReward = xp,
+            subtext = description,
+            progressText = "Mark when finished"
+        )
+
+        val ADDITIONAL_QUESTS = listOf(
+            careQuest("quest_review_moisture", "Review Soil Moisture", 60,
+                "Read the soil moisture sensor and record whether your plant needs water."),
+            careQuest("quest_check_drainage", "Check Pot Drainage", 80,
+                "Inspect the drainage holes and remove any blockages."),
+            careQuest("quest_inspect_flowers", "Inspect Flower Buds", 100,
+                "Check for flower buds and record what you find in the plant journal."),
+            careQuest("quest_track_fruit", "Track Fruit Development", 150,
+                "Check for forming tomatoes and record their development, or note that fruit has not appeared yet."),
+            careQuest("quest_clean_tools", "Clean Gardening Tools", 60,
+                "Clean your gardening tools before the next plant care session."),
+            careQuest("quest_clear_debris", "Clear Fallen Debris", 80,
+                "Remove fallen leaves and debris from around the pot."),
+            careQuest("quest_check_irrigation", "Check the Watering System", 100,
+                "Inspect the watering equipment for leaks and blocked outlets."),
+            careQuest("quest_record_growth", "Record Plant Growth", 90,
+                "Write a journal note about the plant's current growth stage and appearance."),
+            careQuest("quest_check_ties", "Inspect Plant Supports", 100,
+                "Check the stakes and ties, or note whether your plant is ready for a support."),
+            careQuest("quest_plan_harvest", "Plan Your Harvest", 180,
+                "Review the plant's stage and write a plan for monitoring its tomatoes as they ripen.")
+        )
+
+        val QUEST_POOL = ROTATING_QUEST_POOL + ADDITIONAL_QUESTS
+
+        val DAILY_QUESTS = ROTATING_QUEST_POOL.take(ROTATING_DAILY_COUNT) + ADDITIONAL_QUESTS
 
         val DEFAULT_QUESTS = DAILY_QUESTS
     }

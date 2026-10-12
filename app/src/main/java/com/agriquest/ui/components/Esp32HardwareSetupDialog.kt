@@ -55,7 +55,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.agriquest.domain.model.ConnectionState
 import com.agriquest.domain.model.ConnectionStatus
@@ -70,6 +69,7 @@ import com.agriquest.ui.theme.Slate200
 import com.agriquest.ui.theme.Slate500
 import com.agriquest.ui.theme.Slate700
 import com.agriquest.ui.theme.Slate900
+import com.agriquest.ui.theme.scaledTextSize
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -155,7 +155,7 @@ fun Esp32HardwareSetupDialog(
                                 text = "ESP32 Hardware Setup",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
+                                    fontSize = scaledTextSize(16),
                                     color = Slate900
                                 )
                             )
@@ -163,7 +163,7 @@ fun Esp32HardwareSetupDialog(
                                 text = "Live IoT Telemetry Binding",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = Slate500,
-                                    fontSize = 11.sp
+                                    fontSize = scaledTextSize(11)
                                 )
                             )
                         }
@@ -214,7 +214,7 @@ fun Esp32HardwareSetupDialog(
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = Slate900,
-                                    fontSize = 12.sp
+                                    fontSize = scaledTextSize(12)
                                 )
                             )
                         }
@@ -222,8 +222,8 @@ fun Esp32HardwareSetupDialog(
                             text = "1. Turn on ESP32 board.\n2. Tap scan.\n3. Select device to bind telemetry stream.",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = Slate700,
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp
+                                fontSize = scaledTextSize(12),
+                                lineHeight = scaledTextSize(16)
                             )
                         )
                     }
@@ -239,7 +239,7 @@ fun Esp32HardwareSetupDialog(
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = Slate700,
-                            fontSize = 12.sp
+                            fontSize = scaledTextSize(12)
                         )
                     )
 
@@ -283,7 +283,7 @@ fun Esp32HardwareSetupDialog(
                                                 text = device.deviceName,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
                                                     fontWeight = FontWeight.Bold,
-                                                    fontSize = 13.sp,
+                                                    fontSize = scaledTextSize(13),
                                                     color = Slate900
                                                 )
                                             )
@@ -291,7 +291,7 @@ fun Esp32HardwareSetupDialog(
                                                 text = "UUID: ${device.serviceUuid}",
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     color = Slate500,
-                                                    fontSize = 10.sp
+                                                    fontSize = scaledTextSize(10)
                                                 )
                                             )
                                         }
@@ -302,7 +302,7 @@ fun Esp32HardwareSetupDialog(
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontWeight = FontWeight.SemiBold,
                                             color = Emerald700,
-                                            fontSize = 11.sp
+                                            fontSize = scaledTextSize(11)
                                         )
                                     )
                                 }
@@ -334,7 +334,7 @@ fun Esp32HardwareSetupDialog(
                             text = "Status: ${connectionState.statusText}",
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
+                                fontSize = scaledTextSize(12),
                                 color = Slate700
                             )
                         )
@@ -365,7 +365,7 @@ fun Esp32HardwareSetupDialog(
                                 text = "Scan",
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    fontSize = scaledTextSize(13)
                                 )
                             )
                         }
@@ -397,7 +397,7 @@ fun Esp32HardwareSetupDialog(
                                 text = "Connect Device",
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
+                                    fontSize = scaledTextSize(13)
                                 )
                             )
                         }
