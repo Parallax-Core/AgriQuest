@@ -1,14 +1,16 @@
 package com.agriquest.ui.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import com.agriquest.domain.model.PlantGrowthStage
+import com.agriquest.ui.theme.AppLayout
 
 /** Estimated seed-to-harvest windows, not a diagnosis of actual maturity. */
 @Composable
 fun PlantStagesTimeline(stage: PlantGrowthStage) {
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(AppLayout.compactSpacing)) {
         PlantGrowthStage.entries.forEach { item ->
             AppText("${if (item == stage) "Current:" else ""} ${item.displayName}: ${item.timelineText}",
                 style = MaterialTheme.typography.bodySmall)

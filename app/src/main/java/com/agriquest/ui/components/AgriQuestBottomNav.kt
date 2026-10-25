@@ -3,8 +3,11 @@ package com.agriquest.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Assignment
@@ -18,6 +21,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
@@ -76,13 +80,16 @@ fun AgriQuestBottomNav(
         border = BorderStroke(1.dp, navBarColor)
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .windowInsetsPadding(NavigationBarDefaults.windowInsets),
             contentAlignment = Alignment.Center
         ) {
             NavigationBar(
                 modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 430.dp),
+                .widthIn(max = 430.dp)
+                .height(72.dp),
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 containerColor = navBarColor,
                 contentColor = PureWhite,
                 tonalElevation = 0.dp
@@ -152,7 +159,7 @@ private fun NavigationTabImage(
         Image(
             painter = painterResource(id = drawableRes),
             contentDescription = tab.title,
-            modifier = Modifier.size(width = 40.dp, height = 48.dp),
+            modifier = Modifier.size(width = 32.dp, height = 38.4.dp),
             contentScale = ContentScale.Fit,
             colorFilter = if (isSelected) ColorFilter.tint(selectedImageColor) else null
         )

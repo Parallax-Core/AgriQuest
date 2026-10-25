@@ -33,9 +33,14 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
     AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
         PixelPageHeader(uiState.plant.title.replace("🍅", "").trim(), "Plant Details", uiState)
         PlantHeroCard(uiState.plant)
-        PixelButton("Set sowing date", { editingDate = true })
-        Text("Estimated growth based on sowing date. Confirm stages by observing your plant.", style = MaterialTheme.typography.bodySmall)
-        PlantStagesTimeline(uiState.plant.growthStage)
+        PixelPanel {
+            PixelHeading("Growth Timeline")
+            Text("Estimated growth based on sowing date. Confirm stages by observing your plant.",
+                style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+            PlantStagesTimeline(uiState.plant.growthStage)
+            PixelButton("Set sowing date", { editingDate = true },
+                modifier = Modifier.align(Alignment.CenterHorizontally))
+        }
         Surface(color = PixelPaleGreen, shape = RoundedCornerShape(3.dp), border = BorderStroke(1.dp, AppCardBorder)) {
             Row(Modifier.fillMaxWidth().padding(3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("Stats", "Journal").forEachIndexed { index, label ->
