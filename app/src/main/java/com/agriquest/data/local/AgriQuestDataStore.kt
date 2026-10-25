@@ -30,6 +30,9 @@ class AgriQuestDataStore(
     constructor(context: Context) : this(context.dataStore)
 
     companion object {
+        val KEY_TRACKING_START = stringPreferencesKey("growth_tracking_start")
+        val KEY_XP_DATE = stringPreferencesKey("xp_earned_date")
+        val KEY_DAILY_XP = intPreferencesKey("daily_xp_earned")
         val KEY_USER_LEVEL = intPreferencesKey("user_level")
         val KEY_CURRENT_XP = intPreferencesKey("current_xp")
         val KEY_GROWTH_STAGE = stringPreferencesKey("growth_stage")
@@ -43,6 +46,20 @@ class AgriQuestDataStore(
         val KEY_TELEMETRY_LIGHT = floatPreferencesKey("telemetry_light")
         val KEY_LAST_RESET_DATE = stringPreferencesKey("last_reset_date")
         val KEY_QUIZ_COMPLETED_DATE = stringPreferencesKey("quiz_completed_date")
+    }
+
+    val trackingStartFlow = dataStore.data.map { it[KEY_TRACKING_START] }
+    val xpDateFlow = dataStore.data.map { it[KEY_XP_DATE] }
+    val dailyXpFlow = dataStore.data.map { it[KEY_DAILY_XP] ?: 0 }
+    suspend fun saveTrackingStart(date: String) {
+        dataStore.edit { it[KEY_TRACKING_START] = date }
+    }
+    suspend fun saveXpLedger(date: String, dailyXp: Int, totalXp: Int) {
+        dataStore.edit {
+            it[KEY_XP_DATE] = date
+            it[KEY_DAILY_XP] = dailyXp
+            it[KEY_CURRENT_XP] = totalXp
+        }
     }
 
     val userLevelFlow: Flow<Int> = dataStore.data.map { preferences ->

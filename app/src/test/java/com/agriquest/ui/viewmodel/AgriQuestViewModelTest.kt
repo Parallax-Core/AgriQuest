@@ -49,9 +49,9 @@ class AgriQuestViewModelTest {
         assertEquals("Flora", state.plant.name)
         assertEquals("Lvl. 0 Urban Beginner", state.plant.level)
         assertEquals(0, state.plant.currentXp)
-        assertEquals(50, state.plant.maxXp)
+        assertEquals(1000, state.plant.maxXp)
         assertEquals(PlantGrowthStage.GERMINATION, state.plant.growthStage)
-        assertEquals("⚡ Thirsty Roots: Keep soil moisture above 60%", state.activeQuest.title)
+        assertEquals("Check Soil and Water Needs", state.activeQuest.title)
         assertEquals(PlantSource.EMULATED_OFFLINE, state.plantSource)
         assertEquals("ESP32", state.connection.deviceName)
         assertEquals(FanMode.AUTO, state.actuator.fanMode)
@@ -67,53 +67,23 @@ class AgriQuestViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(100, state.plant.currentXp)
-        assertEquals(250, state.plant.maxXp)
-        assertEquals("Lvl. 2 Grower", state.plant.level)
-        assertEquals(PlantGrowthStage.VEGETATIVE_LEAFY, state.plant.growthStage)
+        assertEquals(1000, state.plant.maxXp)
+        assertEquals("Lvl. 0 Urban Beginner", state.plant.level)
+        assertEquals(PlantGrowthStage.GERMINATION, state.plant.growthStage)
     }
 
     @Test
-    fun claimQuest_individualQuestAwardsXpAndCompletingAllIncrementsStreak() = runTest {
+    fun claimQuest_threeMissionsAwardNinetyXpAndOneStreak() = runTest {
         val repo = AgriQuestRepositoryImpl()
         val viewModel = AgriQuestViewModel(repo)
-        val notifications = mutableListOf<String>()
-
-        val job = launch {
-            viewModel.notificationEvents.collect {
-                notifications.add(it)
-            }
-        }
-
-        // Claim Quest 1 (+50 XP) - streak remains 0
-        viewModel.claimQuest("quest_prune_leaves")
+        viewModel.claimQuest(Quest.DAILY_QUESTS.first().id)
         testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        val quest = state.quests.find { it.id == "quest_prune_leaves" }
-        assertTrue(quest?.isClaimed == true)
-        assertEquals(50, state.plant.currentXp)
-        assertEquals(0, state.plant.streakDays)
-        assertTrue(notifications.last().contains("🎉 Quest Completed! +50 XP awarded!"))
-
-        // Claim Quest 2 (+75 XP) - streak remains 0
-        viewModel.claimQuest("quest_deep_watering")
-        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(30, viewModel.uiState.value.plant.currentXp)
         assertEquals(0, viewModel.uiState.value.plant.streakDays)
-
-        // Claim the original third task and the ten additional tasks to complete the day.
-        viewModel.claimQuest("quest_stake_stem")
+        Quest.DAILY_QUESTS.drop(1).forEach { viewModel.claimQuest(it.id) }
         testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals(225, viewModel.uiState.value.plant.currentXp)
-        assertEquals(0, viewModel.uiState.value.plant.streakDays)
-        Quest.ADDITIONAL_QUESTS.forEach { viewModel.claimQuest(it.id) }
-        testDispatcher.scheduler.advanceUntilIdle()
-        val finalState = viewModel.uiState.value
-        assertEquals(1225, finalState.plant.currentXp)
-        assertEquals(1, finalState.plant.streakDays)
-        assertTrue(notifications.last().contains("🎉 All Daily Quests Completed! Care Streak: 1 / 7 Days 🔥"))
-
-        job.cancel()
+        assertEquals(90, viewModel.uiState.value.plant.currentXp)
+        assertEquals(1, viewModel.uiState.value.plant.streakDays)
     }
 
     @Test
@@ -131,7 +101,7 @@ class AgriQuestViewModelTest {
         viewModel.simulateNextDay()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(13, viewModel.uiState.value.quests.size)
+        assertEquals(3, viewModel.uiState.value.quests.size)
         assertTrue(notification?.contains("🌅 Next Day Simulated!") == true)
 
         job.cancel()
@@ -225,9 +195,9 @@ class AgriQuestViewModelTest {
 
         val updatedState = viewModel.uiState.value
         assertEquals(initialScanCount + 1, updatedState.recentScans.size)
-        assertEquals(initialXp + 25, updatedState.plant.currentXp)
+        assertEquals(initialXp, updatedState.plant.currentXp)
         assertTrue(emittedNotification?.contains("📸 AI Leaf Scan Complete") == true)
-        assertTrue(emittedNotification?.contains("+25 XP awarded!") == true)
+        assertTrue(emittedNotification?.contains("AI Leaf Scan Complete") == true)
 
         job.cancel()
     }
@@ -302,11 +272,11 @@ class AgriQuestViewModelTest {
 
         assertTrue(isCorrect)
         val state = viewModel.uiState.value
-        assertEquals(30, state.plant.currentXp)
+        assertEquals(10, state.plant.currentXp)
         assertTrue(state.isQuizCompletedToday)
         assertEquals(1, state.selectedQuizOptionIndex)
         assertEquals(true, state.isQuizAnswerCorrect)
-        assertTrue(notifications.any { it.contains("🎉 Correct! +30 XP Awarded!") })
+        assertTrue(notifications.any { it.contains("🎉 Correct! +10 XP Awarded!") })
 
         job.cancel()
     }

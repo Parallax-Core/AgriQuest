@@ -37,10 +37,10 @@ class PlantDetailsUnitTest {
         val plant = uiState.plant
 
         assertEquals("Roma Rosso 🍅", plant.title)
-        assertEquals(47, plant.dayCount)
+        assertEquals(0, plant.dayCount)
         assertEquals(92, plant.healthPercent)
         assertEquals("Stage 1 - Germinating Tomato Seed", plant.stageTag)
-        assertEquals("Excellent condition • 3 tomatoes ripening", plant.healthSubtext)
+        assertEquals("Observe your plant to assess its condition", plant.healthSubtext)
 
         // Telemetry grid readings matching Task Objectives
         assertEquals(68.0f, uiState.telemetry.soilMoisture, 0.01f)

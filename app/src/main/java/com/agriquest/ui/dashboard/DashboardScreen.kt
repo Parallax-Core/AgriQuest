@@ -53,6 +53,13 @@ fun DashboardScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     var showEsp32SetupDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(viewModel) {
+        while (true) {
+            viewModel.checkAndResetMidnightQuests()
+            kotlinx.coroutines.delay(30_000L)
+        }
+    }
+
     // Listen for notification events (e.g., pump triggers, AI diagnostic results, tab status)
     LaunchedEffect(viewModel) {
         viewModel.notificationEvents.collect { message ->
@@ -95,6 +102,7 @@ fun DashboardScreen(
         },
         onPerformScan = { viewModel.performCameraScan() },
         onAddJournalEntry = { note -> viewModel.addJournalEntry(note, JournalCategory.GENERAL) },
+        onSetSowingDate = { viewModel.setSowingDate(it) },
         onResetStreak = { viewModel.resetStreak() },
         onAnswerQuiz = { optionIndex ->
             coroutineScope.launch { viewModel.submitQuizAnswer(optionIndex) }
@@ -123,6 +131,7 @@ fun DashboardScreenContent(
     onScanForEsp32: () -> Unit = {},
     onPerformScan: () -> Unit = {},
     onAddJournalEntry: (String) -> Unit = {},
+    onSetSowingDate: (String) -> Unit = {},
     onResetStreak: () -> Unit = {},
     onAnswerQuiz: (Int) -> Unit = {},
     onNextQuizQuestion: () -> Unit = {},
@@ -135,6 +144,7 @@ fun DashboardScreenContent(
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
             onAddJournalEntry = onAddJournalEntry,
+            onSetSowingDate = onSetSowingDate,
             snackbarHostState = snackbarHostState
         )
         2 -> QuestsScreenContent(

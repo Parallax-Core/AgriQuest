@@ -24,13 +24,18 @@ import com.agriquest.ui.theme.*
 @Composable
 fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestUiState = AgriQuestUiState(),
     selectedTab: Int = 1, onTabSelected: (Int) -> Unit = {},
-    onAddJournalEntry: (String) -> Unit = {}, snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }) {
+    onAddJournalEntry: (String) -> Unit = {}, onSetSowingDate: (String) -> Unit = {}, snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }) {
+    var editingDate by remember { mutableStateOf(false) }
+    var sowingDate by remember(uiState.plant.sowingDate) { mutableStateOf(uiState.plant.sowingDate) }
     var journal by remember { mutableStateOf(false) }
     var addingNote by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
     AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
         PixelPageHeader(uiState.plant.title.replace("🍅", "").trim(), "Plant Details", uiState)
         PlantHeroCard(uiState.plant)
+        PixelButton("Set sowing date", { editingDate = true })
+        Text("Estimated growth based on sowing date. Confirm stages by observing your plant.", style = MaterialTheme.typography.bodySmall)
+        PlantStagesTimeline(uiState.plant.growthStage)
         Surface(color = PixelPaleGreen, shape = RoundedCornerShape(3.dp), border = BorderStroke(1.dp, AppCardBorder)) {
             Row(Modifier.fillMaxWidth().padding(3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 listOf("Stats", "Journal").forEachIndexed { index, label ->
@@ -66,6 +71,10 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
             }
         }
     }
+    if (editingDate) AlertDialog(onDismissRequest = { editingDate = false }, title = { Text("When were the seeds sown?") },
+        text = { OutlinedTextField(sowingDate, { sowingDate = it }, label = { Text("YYYY-MM-DD") }, singleLine = true) },
+        confirmButton = { TextButton({ onSetSowingDate(sowingDate.trim()); editingDate = false }) { Text("Save") } },
+        dismissButton = { TextButton({ editingDate = false }) { Text("Cancel") } })
     if (addingNote) AlertDialog(onDismissRequest = { addingNote = false }, title = { Text("Add plant note") },
         text = { OutlinedTextField(note, { note = it }, label = { Text("Care note") }) },
         confirmButton = { TextButton(onClick = {

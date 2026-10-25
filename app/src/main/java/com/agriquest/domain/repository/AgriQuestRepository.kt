@@ -56,9 +56,11 @@ interface AgriQuestRepository {
     val isQuizAnswerCorrect: StateFlow<Boolean?>
 
     /**
-     * Increases user current XP by [amount], leveling up when [currentXp] reaches [maxXpForLevel],
-     * recalculating max XP, growth stage, avatar level text, and agro speech bubble.
+     * Increases care XP by up to [amount], subject to the persisted daily cap,
+     * while estimated biological growth follows elapsed days since sowing.
      */
+    suspend fun setSowingDate(date: String): Boolean
+
     suspend fun addXp(amount: Int)
 
     /**
@@ -68,9 +70,9 @@ interface AgriQuestRepository {
     suspend fun claimQuest(questId: String): Boolean
 
     /**
-     * Rotates three tasks, includes the ten additional tasks, and resets completion status,
+     * Restores the three daily observation missions and resets completion status,
      * and updates the daily quests list.
-     * @return the 13 available daily quests.
+     * @return the three available daily quests.
      */
     suspend fun resetDailyQuests(): List<Quest>
 
@@ -148,7 +150,7 @@ interface AgriQuestRepository {
     suspend fun runTfLiteDiagnostic(): String
 
     /**
-     * Triggers leaf camera scan simulation, adding a new diagnostic scan log entry and awarding +25 XP.
+     * Triggers leaf camera scan simulation, adding a new diagnostic scan log entry without repeatable XP rewards.
      */
     suspend fun performCameraScan(): AiScanResult
 
@@ -164,7 +166,7 @@ interface AgriQuestRepository {
 
     /**
      * Submits selected answer option index for the active daily quiz question.
-     * If correct: awards +30 XP, checks for level up, marks today's quiz completed, and returns true.
+     * If correct: awards up to +10 XP, checks for level up, marks today's quiz completed, and returns true.
      * @return true if answer is correct, false otherwise.
      */
     suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean

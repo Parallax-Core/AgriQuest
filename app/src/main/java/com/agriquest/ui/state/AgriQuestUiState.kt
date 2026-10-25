@@ -20,7 +20,7 @@ import com.agriquest.domain.model.TelemetryData
 data class AgriQuestUiState(
     val telemetry: TelemetryData = TelemetryData(),
     val plant: PlantAvatar = PlantAvatar(),
-    val activeQuest: Quest = Quest(),
+    val activeQuest: Quest = Quest.DEFAULT_QUESTS.first(),
     val quests: List<Quest> = Quest.DEFAULT_QUESTS,
     val achievements: List<Achievement> = Achievement.DEFAULT_ACHIEVEMENTS,
     val plantSource: PlantSource = PlantSource.EMULATED_OFFLINE,

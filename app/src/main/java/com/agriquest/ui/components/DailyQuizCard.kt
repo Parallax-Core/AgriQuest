@@ -49,12 +49,12 @@ fun DailyQuizCard(question: AgroQuizQuestion = AgroQuizQuestion.QUIZ_POOL.first(
             Surface(shape = RoundedCornerShape(3.dp), color = if (isAnswerCorrect == true) PixelPaleGreen else PixelTan,
                 border = BorderStroke(1.dp, AppCardBorder)) {
                 Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(if (isAnswerCorrect == true) "CORRECT! +${question.xpReward} XP" else "TRY AGAIN NEXT QUESTION",
+                    Text(if (isAnswerCorrect == true) "CORRECT! +${question.xpReward} XP" else "Daily quiz completed. Try again tomorrow.",
                         style = MaterialTheme.typography.titleMedium, color = PixelGreen)
                     Text(question.explanation, style = MaterialTheme.typography.bodySmall, color = AppTextColor)
                 }
             }
-            PixelButton("Next Question →", onNextQuestion, Modifier.align(Alignment.End))
+            Text("Next quiz reward available tomorrow.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

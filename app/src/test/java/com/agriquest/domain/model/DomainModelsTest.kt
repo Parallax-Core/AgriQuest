@@ -80,12 +80,12 @@ class DomainModelsTest {
         assertEquals(PlantGrowthStage.GERMINATION, PlantGrowthStage.fromLevel(-1))
         assertEquals(PlantGrowthStage.RIPENING, PlantGrowthStage.fromLevel(99))
         assertEquals(PlantGrowthStage.GERMINATION, PlantGrowthStage.fromName(null))
-        val boundaries = listOf(0, 50, 100, 250, 450, 700)
+        val boundaries = listOf(0, 1000, 2800, 5600, 7000, 10500)
         boundaries.forEachIndexed { index, xp ->
             assertEquals(stages[index], PlantGrowthStage.fromXp(xp))
             if (index > 0) assertEquals(stages[index - 1], PlantGrowthStage.fromXp(xp - 1))
         }
-        assertEquals(PlantGrowthStage.RIPENING, PlantGrowthStage.fromXp(2000))
+        assertEquals(PlantGrowthStage.RIPENING, PlantGrowthStage.fromXp(12000))
     }
 
     @Test
@@ -95,9 +95,9 @@ class DomainModelsTest {
         assertEquals("Lvl. 0 Urban Beginner", plant.level)
         assertEquals(0, plant.levelInt)
         assertEquals(0, plant.currentXp)
-        assertEquals(50, plant.maxXp)
+        assertEquals(1000, plant.maxXp)
         assertEquals(PlantGrowthStage.GERMINATION, plant.growthStage)
-        assertEquals("0/50 XP", plant.xpText)
+        assertEquals("0/1000 XP", plant.xpText)
         assertEquals("Vibrant & Healthy", plant.statusTag)
         assertEquals("0/7", plant.streakText)
         assertEquals(0.0f, plant.xpProgress, 0.01f)
@@ -114,18 +114,18 @@ class DomainModelsTest {
         assertEquals(100, quest.progressPercent)
 
         val defaultQuests = Quest.DEFAULT_QUESTS
-        assertEquals(13, defaultQuests.size)
-        assertEquals("quest_prune_leaves", defaultQuests[0].id)
-        assertEquals("quest_deep_watering", defaultQuests[1].id)
-        assertEquals("quest_stake_stem", defaultQuests[2].id)
+        assertEquals(3, defaultQuests.size)
+        assertEquals("quest_review_moisture", defaultQuests[0].id)
+        assertEquals("quest_inspect_plant", defaultQuests[1].id)
+        assertTrue(Quest.ROTATING_QUESTS.any { it.id == defaultQuests[2].id })
 
         val dailyQuests = Quest.DAILY_QUESTS
-        assertEquals(13, dailyQuests.size)
-        assertEquals("quest_prune_leaves", dailyQuests[0].id)
-        assertEquals("quest_deep_watering", dailyQuests[1].id)
-        assertEquals("quest_stake_stem", dailyQuests[2].id)
+        assertEquals(3, dailyQuests.size)
+        assertEquals("quest_review_moisture", dailyQuests[0].id)
+        assertEquals("quest_inspect_plant", dailyQuests[1].id)
+        assertTrue(Quest.ROTATING_QUESTS.any { it.id == dailyQuests[2].id })
 
-        assertTrue(Quest.QUEST_POOL.size >= 8)
+        assertTrue(Quest.QUEST_POOL.containsAll(Quest.DAILY_QUESTS))
     }
 
     @Test

@@ -30,14 +30,14 @@ class AgriQuestRepositoryTest {
         assertEquals("Flora", plant.name)
         assertEquals("Lvl. 0 Urban Beginner", plant.level)
         assertEquals(0, plant.currentXp)
-        assertEquals(50, plant.maxXp)
+        assertEquals(1000, plant.maxXp)
         assertEquals(PlantGrowthStage.GERMINATION, plant.growthStage)
         assertEquals("Vibrant & Healthy", plant.statusTag)
         assertEquals(0, plant.streakDays)
 
         val activeQuest = repo.activeQuest.value
-        assertEquals("quest_prune_leaves", activeQuest.id)
-        assertEquals("Prune Lower Leaves", activeQuest.title)
+        assertEquals("quest_review_moisture", activeQuest.id)
+        assertEquals("Check Soil and Water Needs", activeQuest.title)
 
         val plantSource = repo.plantSource.value
         assertEquals(PlantSource.EMULATED_OFFLINE, plantSource)
@@ -52,86 +52,31 @@ class AgriQuestRepositoryTest {
     }
 
     @Test
-    fun addXp_progressionAndLevelingUp_updatesAvatarAndStage() = runTest {
+    fun addXp_enforcesDailyLimitAndDoesNotRushGrowth() = runTest {
         val repo = AgriQuestRepositoryImpl()
-
-        // 1. Initial State: Level 0, 0/100 XP
-        assertEquals(0, repo.plantAvatar.value.currentXp)
-        assertEquals(50, repo.plantAvatar.value.maxXp)
-        assertEquals(PlantGrowthStage.GERMINATION, repo.plantAvatar.value.growthStage)
-
-        // 2. Add 50 XP -> 50/100 XP, stays Level 0
-        repo.addXp(50)
-        assertEquals(50, repo.plantAvatar.value.currentXp)
-        assertEquals(100, repo.plantAvatar.value.maxXp)
-        assertEquals(PlantGrowthStage.SEEDLING_SPROUT, repo.plantAvatar.value.growthStage)
-
-        // 3. Add 50 XP -> 100/250 XP, Levels up to Level 1 VEGETATIVE_LEAFY!
-        repo.addXp(50)
+        repo.addXp(80)
+        repo.addXp(80)
+        repo.addXp(-100)
         assertEquals(100, repo.plantAvatar.value.currentXp)
-        assertEquals(250, repo.plantAvatar.value.maxXp)
-        assertEquals(PlantGrowthStage.VEGETATIVE_LEAFY, repo.plantAvatar.value.growthStage)
-        assertEquals("Lvl. 2 Grower", repo.plantAvatar.value.level)
-
-        // 4. Add 150 XP -> 250/450 XP, Levels up to Level 2 FLOWERING!
-        repo.addXp(150)
-        assertEquals(250, repo.plantAvatar.value.currentXp)
-        assertEquals(450, repo.plantAvatar.value.maxXp)
-        assertEquals(PlantGrowthStage.FLOWERING, repo.plantAvatar.value.growthStage)
-        assertEquals("Lvl. 3 Master", repo.plantAvatar.value.level)
-
-        // 5. Add 200 XP -> 450/700 XP, Levels up to Level 3 FRUITING_HARVEST!
-        repo.addXp(200)
-        assertEquals(450, repo.plantAvatar.value.currentXp)
-        assertEquals(700, repo.plantAvatar.value.maxXp)
-        assertEquals(PlantGrowthStage.FRUITING_HARVEST, repo.plantAvatar.value.growthStage)
-        assertEquals("Lvl. 4 Fruit Grower", repo.plantAvatar.value.level)
-
-        repo.addXp(250)
-        assertEquals(PlantGrowthStage.RIPENING, repo.plantAvatar.value.growthStage)
-        assertEquals(5, repo.plantAvatar.value.levelInt)
+        assertEquals(100, repo.plantAvatar.value.dailyXp)
+        assertEquals(PlantGrowthStage.GERMINATION, repo.plantAvatar.value.growthStage)
         assertEquals(1000, repo.plantAvatar.value.maxXp)
     }
 
     @Test
-    fun claimQuest_individualQuestDoesNotIncrementStreak_completingAllIncrementsStreak() = runTest {
+    fun claimQuest_awardsThreeMissionsAndOneStreakPerDay() = runTest {
         val repo = AgriQuestRepositoryImpl()
-
-        val activeQuestId = repo.activeQuest.value.id
-        assertEquals("quest_prune_leaves", activeQuestId)
-
-        // Claim one quest; the daily streak stays unchanged until all 13 are complete.
-        val completedAll1 = repo.claimQuest("quest_prune_leaves")
-        assertFalse(completedAll1)
-
-        val q1 = repo.quests.value.find { it.id == "quest_prune_leaves" }
-        assertTrue(q1?.isClaimed == true)
-        assertEquals(50, repo.plantAvatar.value.currentXp)
-        assertEquals(0, repo.plantAvatar.value.streakDays)
-
-        // Claim a second quest without completing the daily set.
-        val completedAll2 = repo.claimQuest("quest_deep_watering")
-        assertFalse(completedAll2)
-        assertEquals(125, repo.plantAvatar.value.currentXp)
-        assertEquals(0, repo.plantAvatar.value.streakDays)
-
-        // The original three tasks no longer finish the expanded daily set.
-        val completedAll3 = repo.claimQuest("quest_stake_stem")
-        assertFalse(completedAll3)
-        assertEquals(225, repo.plantAvatar.value.currentXp)
-        assertEquals(0, repo.plantAvatar.value.streakDays)
-
-        Quest.ADDITIONAL_QUESTS.dropLast(1).forEach {
-            assertFalse(repo.claimQuest(it.id))
-            assertEquals(0, repo.plantAvatar.value.streakDays)
-        }
-        assertTrue(repo.claimQuest(Quest.ADDITIONAL_QUESTS.last().id))
-        assertEquals(1225, repo.plantAvatar.value.currentXp)
-        assertEquals(PlantGrowthStage.RIPENING, repo.plantAvatar.value.growthStage)
-        assertEquals(1f, repo.plantAvatar.value.xpProgress, 0f)
+        val quests = repo.quests.value
+        assertFalse(repo.claimQuest(quests[0].id))
+        assertFalse(repo.claimQuest(quests[0].id))
+        assertEquals(30, repo.plantAvatar.value.currentXp)
+        assertFalse(repo.claimQuest(quests[1].id))
+        assertTrue(repo.claimQuest(quests[2].id))
+        assertEquals(90, repo.plantAvatar.value.currentXp)
         assertEquals(1, repo.plantAvatar.value.streakDays)
-        assertFalse(repo.claimQuest(Quest.ADDITIONAL_QUESTS.last().id))
-        assertEquals(1225, repo.plantAvatar.value.currentXp)
+        assertEquals(PlantGrowthStage.GERMINATION, repo.plantAvatar.value.growthStage)
+        assertFalse(repo.claimQuest(quests[2].id))
+        assertEquals(1, repo.plantAvatar.value.streakDays)
     }
 
     @Test
@@ -154,30 +99,20 @@ class AgriQuestRepositoryTest {
 
         val updatedMoisture = repo.telemetryData.value.soilMoisture
         assertEquals((initialMoisture + 15.0f).coerceAtMost(100.0f), updatedMoisture, 0.01f)
-        assertEquals(15, repo.plantAvatar.value.currentXp)
+        assertEquals(0, repo.plantAvatar.value.currentXp)
         assertEquals(0, repo.plantAvatar.value.streakDays)
     }
 
     @Test
-    fun resetDailyQuests_keepsTenAdditionalTasksAndRotatesThreeTasks() = runTest {
+    fun resetDailyQuests_restoresThreeSafeMissionsWithoutResettingXpLimit() = runTest {
         val repo = AgriQuestRepositoryImpl()
-
-        // Complete all initial quests
-        repo.claimQuest("quest_prune_leaves")
-        repo.claimQuest("quest_deep_watering")
-        repo.claimQuest("quest_stake_stem")
-        Quest.ADDITIONAL_QUESTS.forEach { repo.claimQuest(it.id) }
-        assertEquals(1, repo.plantAvatar.value.streakDays)
-
-        // Reset & shuffle daily quests
-        val newQuests = repo.resetDailyQuests()
-        assertEquals(13, newQuests.size)
-        assertTrue(newQuests.all { !it.isClaimed })
-        assertEquals(newQuests, repo.quests.value)
-        assertTrue(Quest.QUEST_POOL.containsAll(newQuests))
-        assertTrue(newQuests.containsAll(Quest.ADDITIONAL_QUESTS))
-        assertEquals(13, newQuests.map { it.id }.distinct().size)
-        assertTrue(newQuests.sumOf { it.xpReward } >= PlantGrowthStage.RIPENING.maxXp)
+        Quest.DAILY_QUESTS.forEach { repo.claimQuest(it.id) }
+        repo.addXp(10)
+        val quests = repo.resetDailyQuests()
+        assertEquals(3, quests.size)
+        assertTrue(quests.all { !it.isClaimed })
+        quests.forEach { repo.claimQuest(it.id) }
+        assertEquals(100, repo.plantAvatar.value.currentXp)
     }
 
     @Test
@@ -236,7 +171,7 @@ class AgriQuestRepositoryTest {
         assertEquals(initialScanCount + 1, repo.recentScans.value.size)
         assertEquals(newScan, repo.recentScans.value.first())
         assertEquals("Healthy Leaf", newScan.title)
-        assertEquals(initialXp + 25, repo.plantAvatar.value.currentXp)
+        assertEquals(initialXp, repo.plantAvatar.value.currentXp)
     }
 
     @Test
@@ -270,7 +205,7 @@ class AgriQuestRepositoryTest {
         // First call with explicit date
         val resetOccurred = repo.checkAndResetMidnightQuests("2026-03-30")
         assertTrue(resetOccurred)
-        assertEquals(13, repo.quests.value.size)
+        assertEquals(3, repo.quests.value.size)
         assertTrue(repo.quests.value.all { !it.isClaimed })
 
         // Second call on same date should not reset
@@ -280,7 +215,7 @@ class AgriQuestRepositoryTest {
 
     @Test
     fun checkAndResetMidnightQuests_consecutiveNextDay_resetsQuestsAndPreservesStreak() = runTest {
-        val repo = AgriQuestRepositoryImpl()
+        val repo = AgriQuestRepositoryImpl(now = { java.text.SimpleDateFormat("yyyy-MM-dd").parse("2026-03-30")!! })
 
         // Set initial reset date
         repo.checkAndResetMidnightQuests("2026-03-30")
@@ -324,7 +259,7 @@ class AgriQuestRepositoryTest {
         val isCorrect = repo.submitQuizAnswer(1)
 
         assertTrue(isCorrect)
-        assertEquals(30, repo.plantAvatar.value.currentXp)
+        assertEquals(10, repo.plantAvatar.value.currentXp)
         assertTrue(repo.isQuizCompletedToday.value)
         assertEquals(1, repo.selectedQuizOptionIndex.value)
         assertEquals(true, repo.isQuizAnswerCorrect.value)
@@ -357,7 +292,7 @@ class AgriQuestRepositoryTest {
         repo.resetQuizState()
 
         assertEquals(-1, repo.selectedQuizOptionIndex.value)
-        assertFalse(repo.isQuizCompletedToday.value)
+        assertTrue(repo.isQuizCompletedToday.value)
         assertNull(repo.isQuizAnswerCorrect.value)
     }
 
@@ -376,7 +311,7 @@ class AgriQuestRepositoryTest {
         val nextQuestion = repo.currentQuizQuestion.value
         assertEquals("quiz_light_spectrum", nextQuestion.id)
         assertEquals(-1, repo.selectedQuizOptionIndex.value)
-        assertFalse(repo.isQuizCompletedToday.value)
+        assertTrue(repo.isQuizCompletedToday.value)
         assertNull(repo.isQuizAnswerCorrect.value)
     }
 }

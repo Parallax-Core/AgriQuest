@@ -39,100 +39,6 @@ data class Quest(
         get() = (progress * 100).toInt().coerceIn(0, 100)
 
     companion object {
-        const val ROTATING_DAILY_COUNT = 3
-
-        /** Existing tasks rotate daily; the ten additional tasks are always available. */
-        val ROTATING_QUEST_POOL = listOf(
-            Quest(
-                id = "quest_prune_leaves",
-                title = "Prune Lower Leaves",
-                difficulty = "Easy",
-                progress = 1.0f,
-                xpReward = 50,
-                subtext = "Remove yellowing bottom leaves to improve airflow and prevent disease.",
-                progressText = "2 / 2 leaves",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_deep_watering",
-                title = "Deep Watering Session",
-                difficulty = "Easy",
-                progress = 1.0f,
-                xpReward = 75,
-                subtext = "Water thoroughly until soil moisture reaches 75%. Let the roots drink deeply.",
-                progressText = "75% Moisture Goal",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_stake_stem",
-                title = "Stake Main Stem",
-                difficulty = "Medium",
-                progress = 1.0f,
-                xpReward = 100,
-                subtext = "Add support stake to prevent stem bend as tomatoes grow heavier.",
-                progressText = "1 / 1 stake placed",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_check_ph",
-                title = "Check Soil pH Balance",
-                difficulty = "Medium",
-                progress = 1.0f,
-                xpReward = 60,
-                subtext = "Verify soil pH is between 6.0 and 6.8 for optimal nutrient absorption.",
-                progressText = "pH 6.5 Optimal",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_organic_fertilizer",
-                title = "Apply Organic Fertilizer",
-                difficulty = "Hard",
-                progress = 1.0f,
-                xpReward = 120,
-                subtext = "Feed soil with compost tea or liquid kelp for fruiting energy.",
-                progressText = "Fertilizer Applied",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_inspect_undersides",
-                title = "Inspect Leaf Undersides",
-                difficulty = "Easy",
-                progress = 1.0f,
-                xpReward = 40,
-                subtext = "Check under leaves for early signs of aphids, spider mites, or whiteflies.",
-                progressText = "Pest Check Clean",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_rotate_pot",
-                title = "Rotate Pot for Sunlight",
-                difficulty = "Easy",
-                progress = 1.0f,
-                xpReward = 30,
-                subtext = "Turn pot 180 degrees to ensure even sunlight exposure on all sides.",
-                progressText = "Rotated 180°",
-                isClaimed = false,
-                isClaimable = true
-            ),
-            Quest(
-                id = "quest_wipe_dust",
-                title = "Wipe Leaf Dust",
-                difficulty = "Easy",
-                progress = 1.0f,
-                xpReward = 35,
-                subtext = "Gently wipe dust off mature leaves to boost photosynthesis efficiency.",
-                progressText = "Leaves Cleaned",
-                isClaimed = false,
-                isClaimable = true
-            )
-        )
-
         private fun careQuest(id: String, title: String, xp: Int, description: String) = Quest(
             id = id,
             title = title,
@@ -141,33 +47,51 @@ data class Quest(
             progressText = "Mark when finished"
         )
 
-        val ADDITIONAL_QUESTS = listOf(
-            careQuest("quest_review_moisture", "Review Soil Moisture", 60,
-                "Read the soil moisture sensor and record whether your plant needs water."),
-            careQuest("quest_check_drainage", "Check Pot Drainage", 80,
-                "Inspect the drainage holes and remove any blockages."),
-            careQuest("quest_inspect_flowers", "Inspect Flower Buds", 100,
-                "Check for flower buds and record what you find in the plant journal."),
-            careQuest("quest_track_fruit", "Track Fruit Development", 150,
-                "Check for forming tomatoes and record their development, or note that fruit has not appeared yet."),
-            careQuest("quest_clean_tools", "Clean Gardening Tools", 60,
-                "Clean your gardening tools before the next plant care session."),
-            careQuest("quest_clear_debris", "Clear Fallen Debris", 80,
-                "Remove fallen leaves and debris from around the pot."),
-            careQuest("quest_check_irrigation", "Check the Watering System", 100,
-                "Inspect the watering equipment for leaks and blocked outlets."),
-            careQuest("quest_record_growth", "Record Plant Growth", 90,
-                "Write a journal note about the plant's current growth stage and appearance."),
-            careQuest("quest_check_ties", "Inspect Plant Supports", 100,
-                "Check the stakes and ties, or note whether your plant is ready for a support."),
-            careQuest("quest_plan_harvest", "Plan Your Harvest", 180,
-                "Review the plant's stage and write a plan for monitoring its tomatoes as they ripen.")
+        // Safe daily observations; water only when needed.
+        private val DAILY_CORE = listOf(
+            careQuest("quest_review_moisture", "Check Soil and Water Needs", 30,
+                "Check soil and drainage. Water only if needed, never just to earn XP."),
+            careQuest("quest_inspect_plant", "Inspect Plant and Growing Conditions", 30,
+                "Check light, temperature and growth. After emergence, inspect leaves for pests.")
         )
 
-        val QUEST_POOL = ROTATING_QUEST_POOL + ADDITIONAL_QUESTS
+        // All are safe at every stage, including seeds that have not emerged yet.
+        val ROTATING_QUESTS = listOf(
+            careQuest("quest_record_growth", "Record Today's Growth", 30,
+                "Record emergence, leaves, flowers or fruit in your journal. Note no change if appropriate."),
+            careQuest("quest_check_drainage", "Inspect Pot Drainage", 30,
+                "Check that drainage holes are clear and the pot is not sitting in standing water."),
+            careQuest("quest_review_light", "Review Today's Light Exposure", 30,
+                "Record where the pot receives light and any prolonged shade. If seedlings have emerged, check for leaning."),
+            careQuest("quest_clean_tools", "Check Gardening Tool Cleanliness", 30,
+                "Inspect tools and clean dirty surfaces before the next care session. Note if tools are already clean."),
+            careQuest("quest_check_airflow", "Check Airflow Around the Pot", 30,
+                "Check for blocked ventilation around the growing area, while protecting young seedlings from strong wind."),
+            careQuest("quest_clear_debris", "Inspect the Growing Area", 30,
+                "Look for fallen debris around the pot and clear it if present. Avoid disturbing seeds or roots."),
+            careQuest("quest_compare_growth", "Compare With Your Previous Growth Note", 30,
+                "Compare the plant with an earlier note or photo. If none exists, create a baseline; no visible change is valid."),
+            careQuest("quest_review_temperature", "Review Temperature Changes", 30,
+                "Record the temperature and any recent hot or cool conditions around the pot.")
+        )
 
-        val DAILY_QUESTS = ROTATING_QUEST_POOL.take(ROTATING_DAILY_COUNT) + ADDITIONAL_QUESTS
+        /** Calendar rotation guarantees a different third mission on consecutive days.
+         * UTC is used only to calculate a day index from a local calendar date (DST safe).
+         * Reopening or refreshing on the same date always returns the same mission IDs.
+         */
+        fun forDate(date: String): List<Quest> {
+            val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                isLenient = false
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+            val day = requireNotNull(parser.parse(date)).time / 86_400_000L
+            val index = Math.floorMod(day, ROTATING_QUESTS.size.toLong()).toInt()
+            return DAILY_CORE + ROTATING_QUESTS[index]
+        }
 
-        val DEFAULT_QUESTS = DAILY_QUESTS
+        val QUEST_POOL = DAILY_CORE + ROTATING_QUESTS
+        val DAILY_QUESTS: List<Quest>
+            get() = forDate(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()))
+        val DEFAULT_QUESTS: List<Quest> get() = DAILY_QUESTS
     }
 }

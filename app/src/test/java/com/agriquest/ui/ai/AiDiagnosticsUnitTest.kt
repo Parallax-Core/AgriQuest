@@ -101,11 +101,11 @@ class AiDiagnosticsUnitTest {
         assertEquals("98%", latestScan.confidence)
 
         // Check +25 XP awarded
-        assertEquals(initialXp + 25, updatedState.plant.currentXp)
+        assertEquals(initialXp, updatedState.plant.currentXp)
 
         // Check notification Toast emitted
         assertTrue(emittedToast != null)
-        assertTrue(emittedToast?.contains("+25 XP awarded!") == true)
+        assertTrue(emittedToast?.contains("AI Leaf Scan Complete") == true)
 
         job.cancel()
     }

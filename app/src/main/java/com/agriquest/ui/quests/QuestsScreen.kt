@@ -97,7 +97,7 @@ fun QuestsScreenContent(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 AppText("★ Quiz Rewards", heading = true, color = Color(0xFFFFDF6D),
                     style = MaterialTheme.typography.titleMedium)
-                AppText("+${uiState.currentQuizQuestion.xpReward} XP / answer", color = Color(0xFFFFF5D9),
+                AppText("+${uiState.currentQuizQuestion.xpReward} XP / day", color = Color(0xFFFFF5D9),
                     style = MaterialTheme.typography.labelSmall)
             }
             AppText("Answer correctly to earn XP and grow your plant knowledge.", color = Color(0xFFADC3C8),
@@ -131,11 +131,12 @@ private fun AvailableXpBanner(uiState: AgriQuestUiState) {
                         Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
                 }
             }
-            AppText("+${uiState.quests.sumOf { it.xpReward }} XP", heading = true, style = MaterialTheme.typography.displaySmall)
+            AppText("${uiState.plant.dailyXp} / 100 XP", heading = true, style = MaterialTheme.typography.displaySmall)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 AppText("Level ${uiState.plant.levelInt}", style = MaterialTheme.typography.labelMedium, weight = FontWeight.SemiBold)
                 AppText("${uiState.plant.currentXp} / ${uiState.plant.maxXp} XP", style = MaterialTheme.typography.labelMedium)
             }
+            AppText("3 missions (90 XP) + daily quiz (10 XP). One mission changes every day.", style = MaterialTheme.typography.bodySmall)
             QuestProgress(uiState.plant.xpProgress, Color(0xFF649B32), Color(0xFFF3E0A0))
         }
     }

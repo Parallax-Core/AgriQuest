@@ -31,7 +31,7 @@ class DashboardUnitTest {
         val plant = uiState.plant
         assertEquals("Lvl. 0 Urban Beginner", plant.level)
         assertEquals(0, plant.currentXp)
-        assertEquals(50, plant.maxXp)
+        assertEquals(1000, plant.maxXp)
         assertEquals(PlantGrowthStage.GERMINATION, plant.growthStage)
         assertEquals("Vibrant & Healthy", plant.statusTag)
         assertEquals(0, plant.streakDays)
@@ -51,16 +51,16 @@ class DashboardUnitTest {
 
         // 1. Active Quest Banner Objectives
         val quest = uiState.activeQuest
-        assertEquals("⚡ Thirsty Roots: Keep soil moisture above 60%", quest.title)
+        assertEquals("Check Soil and Water Needs", quest.title)
         assertEquals(1.0f, quest.progress, 0.01f)
         assertEquals(100, quest.progressPercent)
         assertTrue(quest.isCompleted)
         assertFalse(quest.isClaimed)
         assertTrue(quest.isClaimable)
-        assertEquals("+50 XP", quest.xpRewardText)
+        assertEquals("+30 XP", quest.xpRewardText)
 
         // 2. Default Quests List
-        assertEquals(13, uiState.quests.size)
+        assertEquals(3, uiState.quests.size)
 
         // 3. Actuator Controls Objectives
         val actuator = uiState.actuator

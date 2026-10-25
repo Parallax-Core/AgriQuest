@@ -117,6 +117,13 @@ class AgriQuestViewModel(
     /**
      * Action to add XP points directly to user progression.
      */
+    fun setSowingDate(date: String) {
+        viewModelScope.launch {
+            val saved = repository.setSowingDate(date)
+            _notificationEvents.emit(if (saved) "Sowing date saved. Growth estimate updated." else "Enter a valid past or current date (YYYY-MM-DD).")
+        }
+    }
+
     fun addXp(amount: Int) {
         viewModelScope.launch {
             repository.addXp(amount)
@@ -144,7 +151,7 @@ class AgriQuestViewModel(
     }
 
     /**
-     * Action to simulate next day, rotating three quests and resetting all 13 daily tasks.
+     * Action to simulate next day, resetting the three daily missions.
      */
     fun simulateNextDay() {
         viewModelScope.launch {
@@ -224,12 +231,12 @@ class AgriQuestViewModel(
     }
 
     /**
-     * Action to perform camera leaf scan simulation, logging scan result and awarding +25 XP.
+     * Action to perform camera leaf scan simulation, logging scan results without repeatable XP rewards.
      */
     fun performCameraScan() {
         viewModelScope.launch {
             val scanResult = repository.performCameraScan()
-            _notificationEvents.emit("📸 AI Leaf Scan Complete: ${scanResult.title} (${scanResult.confidence}) (+25 XP awarded!)")
+            _notificationEvents.emit("📸 AI Leaf Scan Complete: ${scanResult.title} (${scanResult.confidence}) ")
         }
     }
 
@@ -286,14 +293,15 @@ class AgriQuestViewModel(
 
     /**
      * Action to submit daily quiz answer option index.
-     * If selected option is correct: awards +30 XP, checks for level up, marks today's quiz completed in DataStore,
-     * emits celebration toast "🎉 Correct! +30 XP Awarded!".
+     * If selected option is correct: awards +10 XP, checks for level up, marks today's quiz completed in DataStore,
+     * emits celebration toast "🎉 Correct! +10 XP Awarded!".
      * Returns answer result so UI displays correct/incorrect answer feedback and explanation.
      */
     suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean {
+        if (repository.isQuizCompletedToday.value) return false
         val isCorrect = repository.submitQuizAnswer(selectedOptionIndex)
         if (isCorrect) {
-            _notificationEvents.emit("🎉 Correct! +30 XP Awarded!")
+            _notificationEvents.emit("🎉 Correct! +10 XP Awarded!")
         }
         return isCorrect
     }

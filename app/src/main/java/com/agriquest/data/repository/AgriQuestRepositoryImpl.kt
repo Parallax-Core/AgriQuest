@@ -20,7 +20,10 @@ import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.repository.AgriQuestRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +42,8 @@ class AgriQuestRepositoryImpl(
     private val dataStore: AgriQuestDataStore? = null,
     private val simulationEngine: TelemetrySimulationEngine = TelemetrySimulationEngine(),
     val esp32BleManager: Esp32BleManager = Esp32BleManager(),
-    coroutineScope: CoroutineScope? = null
+    coroutineScope: CoroutineScope? = null,
+    private val now: () -> Date = { Date() }
 ) : AgriQuestRepository {
 
     companion object {
@@ -57,6 +61,13 @@ class AgriQuestRepositoryImpl(
 
     private val scope = coroutineScope ?: CoroutineScope(Dispatchers.Default)
 
+    private val initialized = CompletableDeferred<Unit>()
+    private val claimMutex = Mutex()
+    private val rewardMutex = Mutex()
+    private var trackingStart = getTodayDateString()
+    private var xpDate = getTodayDateString()
+    private var earnedToday = 0
+    private var quizRewardDate: String? = null
     private var memoryLastResetDate: String? = null
     private var simulationJob: Job? = null
     private var bleStateJob: Job? = null
@@ -86,15 +97,16 @@ class AgriQuestRepositoryImpl(
             statusTag = "Vibrant & Healthy",
             streakDays = 0,
             targetStreakDays = 7,
+            sowingDate = trackingStart,
             speechBubble = PlantGrowthStage.GERMINATION.speechBubble
         )
     )
     override val plantAvatar: StateFlow<PlantAvatar> = _plantAvatar.asStateFlow()
 
-    private val _quests = MutableStateFlow(Quest.DEFAULT_QUESTS)
+    private val _quests = MutableStateFlow(Quest.forDate(getTodayDateString()))
     override val quests: StateFlow<List<Quest>> = _quests.asStateFlow()
 
-    private val _activeQuest = MutableStateFlow(Quest.DEFAULT_QUESTS.first())
+    private val _activeQuest = MutableStateFlow(_quests.value.first())
     override val activeQuest: StateFlow<Quest> = _activeQuest.asStateFlow()
 
     private val _achievements = MutableStateFlow(Achievement.DEFAULT_ACHIEVEMENTS)
@@ -137,13 +149,17 @@ class AgriQuestRepositoryImpl(
     override val isQuizAnswerCorrect: StateFlow<Boolean?> = _isQuizAnswerCorrect.asStateFlow()
 
     init {
-        // ALWAYS force unanswered quiz state on repository initialization
+        // Restore the daily reward lock after loading persistence.
         resetQuizState()
 
         // Load initial state from DataStore if available
         dataStore?.let { store ->
             scope.launch {
                 runCatching {
+                    trackingStart = store.trackingStartFlow.first() ?: getTodayDateString().also { store.saveTrackingStart(it) }
+                    xpDate = store.xpDateFlow.first() ?: getTodayDateString()
+                    earnedToday = store.dailyXpFlow.first()
+                    quizRewardDate = store.quizCompletedDateFlow.first()
                     val xp = store.currentXpFlow.first()
                     val source = store.plantSourceFlow.first()
                     val streak = store.streakDaysFlow.first()
@@ -165,9 +181,9 @@ class AgriQuestRepositoryImpl(
                     updateQuestsWithClaimed(claimedIds)
 
                     // Midnight date check & quest reset on repository startup
-                    checkAndResetMidnightQuests()
+                    refreshDailyQuests()
 
-                    // ALWAYS force unanswered quiz state after loading DataStore
+                    // Restore daily completion while clearing transient answer selection.
                     resetQuizState()
 
                     if (source == PlantSource.EMULATED_OFFLINE) {
@@ -176,8 +192,10 @@ class AgriQuestRepositoryImpl(
                         bindBleHardwareState()
                     }
                 }
+                initialized.complete(Unit)
             }
         } ?: run {
+            initialized.complete(Unit)
             startSimulationRoutine()
         }
     }
@@ -259,12 +277,15 @@ class AgriQuestRepositoryImpl(
     }
 
     private fun updateAvatarProgression(totalXp: Int, streakDays: Int = _streakDays.value) {
-        val (levelInt, stage, maxXp) = calculateLevelAndStage(totalXp)
+        val (levelInt, stage, maxXp) = calculateLevelAndStage()
         _streakDays.value = streakDays
         _plantAvatar.value = _plantAvatar.value.copy(
             level = stage.avatarLevelText,
             levelInt = levelInt,
+            sowingDate = trackingStart,
             currentXp = totalXp,
+            dailyXp = if (xpDate == getTodayDateString()) earnedToday else 0,
+            dayCount = calculateDaysBetween(trackingStart, getTodayDateString()).toInt().coerceAtLeast(0),
             maxXp = maxXp,
             growthStage = stage,
             stageTag = "Stage ${stage.stageLevel + 1} - ${stage.stageTitle}",
@@ -290,35 +311,49 @@ class AgriQuestRepositoryImpl(
         _activeQuest.value = firstUnclaimed
     }
 
-    private fun calculateLevelAndStage(totalXp: Int): Triple<Int, PlantGrowthStage, Int> {
-        val stage = PlantGrowthStage.fromXp(totalXp)
+    private fun calculateLevelAndStage(): Triple<Int, PlantGrowthStage, Int> {
+        val stage = PlantGrowthStage.fromDays(calculateDaysBetween(trackingStart, getTodayDateString()).toInt().coerceAtLeast(0))
         return Triple(stage.stageLevel, stage, stage.maxXp)
     }
 
-    override suspend fun addXp(amount: Int) {
-        val newXp = _plantAvatar.value.currentXp + amount
-        val (newLevelInt, newStage, newMaxXp) = calculateLevelAndStage(newXp)
-
-        _plantAvatar.value = _plantAvatar.value.copy(
-            level = newStage.avatarLevelText,
-            levelInt = newLevelInt,
-            currentXp = newXp,
-            maxXp = newMaxXp,
-            growthStage = newStage,
-            stageTag = "Stage ${newStage.stageLevel + 1} - ${newStage.stageTitle}",
-            streakDays = _streakDays.value,
-            speechBubble = newStage.speechBubble
-        )
-
-        dataStore?.saveUserProgression(newLevelInt, newXp, newStage)
+    override suspend fun setSowingDate(date: String): Boolean {
+        initialized.await()
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+        if (!date.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}"))) return false
+        val parsed = runCatching { parser.parse(date) }.getOrNull() ?: return false
+        if (parsed.after(now())) return false
+        trackingStart = date
+        dataStore?.saveTrackingStart(date)
+        updateAvatarProgression(_plantAvatar.value.currentXp)
+        return true
     }
 
-    override suspend fun claimQuest(questId: String): Boolean {
+    override suspend fun addXp(amount: Int) {
+        initialized.await()
+        awardXp(amount)
+    }
+
+    private suspend fun awardXp(amount: Int) = rewardMutex.withLock {
+        if (amount <= 0) return@withLock
+        val today = getTodayDateString()
+        if (today > xpDate) { xpDate = today; earnedToday = 0 }
+        if (today < xpDate) return@withLock
+        val granted = amount.coerceAtMost(PlantGrowthStage.DAILY_XP_LIMIT - earnedToday)
+        val total = (_plantAvatar.value.currentXp.toLong() + granted).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        earnedToday += granted
+        dataStore?.saveXpLedger(today, earnedToday, total)
+        updateAvatarProgression(total)
+        dataStore?.saveUserProgression(_plantAvatar.value.levelInt, total, _plantAvatar.value.growthStage)
+    }
+
+    override suspend fun claimQuest(questId: String): Boolean = claimMutex.withLock {
+        initialized.await()
+        checkAndResetMidnightQuests()
         val questList = _quests.value.toMutableList()
         val index = questList.indexOfFirst { it.id == questId }
         if (index != -1) {
             val quest = questList[index]
-            if (!quest.isClaimed) {
+            if (!quest.isClaimed && quest.isClaimable) {
                 val allClaimedBefore = questList.all { it.isClaimed }
                 val claimedQuest = quest.copy(
                     progress = 1.0f,
@@ -343,14 +378,11 @@ class AgriQuestRepositoryImpl(
     }
 
     override suspend fun resetDailyQuests(): List<Quest> {
-        val newDailyQuests = (Quest.ROTATING_QUEST_POOL.shuffled().take(Quest.ROTATING_DAILY_COUNT) +
-            Quest.ADDITIONAL_QUESTS).map { q ->
-            q.copy(
-                progress = 1.0f,
-                isClaimed = false,
-                isClaimable = true
-            )
-        }
+        return resetQuestsForDate(getTodayDateString())
+    }
+
+    private suspend fun resetQuestsForDate(date: String): List<Quest> {
+        val newDailyQuests = Quest.forDate(date)
         _quests.value = newDailyQuests
         updateActiveQuest(newDailyQuests)
         dataStore?.clearClaimedQuestIds()
@@ -359,12 +391,12 @@ class AgriQuestRepositoryImpl(
 
     private fun getTodayDateString(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        return sdf.format(Date())
+        return sdf.format(now())
     }
 
     private fun calculateDaysBetween(startDateString: String, endDateString: String): Long {
         return try {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
             val startDate = sdf.parse(startDateString)
             val endDate = sdf.parse(endDateString)
             if (startDate != null && endDate != null) {
@@ -379,6 +411,12 @@ class AgriQuestRepositoryImpl(
     }
 
     override suspend fun checkAndResetMidnightQuests(todayDateString: String?): Boolean {
+        initialized.await()
+        return refreshDailyQuests(todayDateString)
+    }
+
+    private suspend fun refreshDailyQuests(todayDateString: String? = null): Boolean {
+        updateAvatarProgression(_plantAvatar.value.currentXp)
         val todayString = todayDateString ?: getTodayDateString()
         val lastResetDate = dataStore?.lastResetDateFlow?.first() ?: memoryLastResetDate
 
@@ -387,11 +425,12 @@ class AgriQuestRepositoryImpl(
             dataStore?.saveLastResetDate(todayString)
             resetQuizState()
             return true
-        } else if (todayString != lastResetDate) {
+        } else if (todayString > lastResetDate) {
             if (calculateDaysBetween(lastResetDate, todayString) > 1) {
                 resetStreak()
             }
-            resetDailyQuests()
+            resetQuestsForDate(todayString)
+            quizRewardDate = null
             resetQuizState()
             dataStore?.clearQuizCompletedDate()
 
@@ -445,8 +484,7 @@ class AgriQuestRepositoryImpl(
         dataStore?.saveTelemetryData(updatedTelemetry)
         val updatedMoisture = updatedTelemetry.soilMoisture
 
-        // 2. Grant +15 XP to the user for taking care of the plant
-        addXp(TelemetrySimulationEngine.PUMP_XP_REWARD)
+                // Watering does not award repeatable XP.
 
         // 3. Checks and updates progress on care quests ("🌱 First Water" and "⚡ Thirsty Roots")
         val questList = _quests.value.toMutableList()
@@ -478,7 +516,7 @@ class AgriQuestRepositoryImpl(
         }
 
         // 5. Trigger notification/toast callback for activation
-        val startMessage = "💧 Water pump triggered for ${durationSeconds}s! Soil moisture restored by +15% to ${updatedMoisture.toInt()}% (+15 XP awarded)."
+        val startMessage = "💧 Water pump triggered for ${durationSeconds}s! Soil moisture restored by +15% to ${updatedMoisture.toInt()}%."
         onNotification(startMessage)
 
         // 6. Countdown timer execution
@@ -534,7 +572,7 @@ class AgriQuestRepositoryImpl(
     }
 
     /**
-     * Triggers leaf camera scan simulation, adding a new diagnostic scan log entry and awarding +25 XP.
+     * Triggers leaf camera scan simulation, adding a new diagnostic scan log entry without repeatable XP rewards.
      */
     override suspend fun performCameraScan(): AiScanResult {
         delay(300L)
@@ -547,7 +585,7 @@ class AgriQuestRepositoryImpl(
         )
         val updatedScans = listOf(newScan) + _recentScans.value
         _recentScans.value = updatedScans
-        addXp(25)
+        // Scanning does not award repeatable XP.
         return newScan
     }
 
@@ -566,7 +604,7 @@ class AgriQuestRepositoryImpl(
      */
     override fun resetQuizState() {
         _selectedQuizOptionIndex.value = -1
-        _isQuizCompletedToday.value = false
+        _isQuizCompletedToday.value = quizRewardDate == getTodayDateString()
         _isQuizAnswerCorrect.value = null
     }
 
@@ -574,6 +612,12 @@ class AgriQuestRepositoryImpl(
      * Submits selected answer option index for the active daily quiz question.
      */
     override suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean {
+        initialized.await()
+        if (selectedOptionIndex !in _currentQuizQuestion.value.options.indices) return false
+        val today = getTodayDateString()
+        if (quizRewardDate == today) return false
+        quizRewardDate = today
+        dataStore?.saveQuizCompletedDate(today)
         val question = _currentQuizQuestion.value
         val isCorrect = selectedOptionIndex == question.correctOptionIndex
         _selectedQuizOptionIndex.value = selectedOptionIndex
