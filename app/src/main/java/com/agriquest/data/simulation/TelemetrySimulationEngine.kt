@@ -79,7 +79,6 @@ class TelemetrySimulationEngine(
 
     companion object {
         const val DEFAULT_PUMP_RESTORE_AMOUNT = 15.0f
-        const val PUMP_XP_REWARD = 15
 
         const val MIN_SOIL_MOISTURE = 40.0f
         const val MIN_TEMP = 23.5f

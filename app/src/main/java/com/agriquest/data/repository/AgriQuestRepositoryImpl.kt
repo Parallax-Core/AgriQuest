@@ -42,8 +42,6 @@ class AgriQuestRepositoryImpl(
     private val dataStore: AgriQuestDataStore? = null,
     private val simulationEngine: TelemetrySimulationEngine = TelemetrySimulationEngine(),
     val esp32BleManager: Esp32BleManager = Esp32BleManager(),
-    coroutineScope: CoroutineScope? = null,
-    private val now: () -> Date = { Date() }
 ) : AgriQuestRepository {
 
     companion object {
@@ -59,7 +57,7 @@ class AgriQuestRepositoryImpl(
         }
     }
 
-    private val scope = coroutineScope ?: CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.Default)
 
     private val initialized = CompletableDeferred<Unit>()
     private val claimMutex = Mutex()
@@ -321,7 +319,7 @@ class AgriQuestRepositoryImpl(
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
         if (!date.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}"))) return false
         val parsed = runCatching { parser.parse(date) }.getOrNull() ?: return false
-        if (parsed.after(now())) return false
+        if (parsed.after(Date())) return false
         trackingStart = date
         dataStore?.saveTrackingStart(date)
         updateAvatarProgression(_plantAvatar.value.currentXp)
@@ -391,7 +389,7 @@ class AgriQuestRepositoryImpl(
 
     private fun getTodayDateString(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        return sdf.format(now())
+        return sdf.format(Date())
     }
 
     private fun calculateDaysBetween(startDateString: String, endDateString: String): Long {
@@ -410,14 +408,14 @@ class AgriQuestRepositoryImpl(
         }
     }
 
-    override suspend fun checkAndResetMidnightQuests(todayDateString: String?): Boolean {
+    override suspend fun checkAndResetMidnightQuests(): Boolean {
         initialized.await()
-        return refreshDailyQuests(todayDateString)
+        return refreshDailyQuests()
     }
 
-    private suspend fun refreshDailyQuests(todayDateString: String? = null): Boolean {
+    private suspend fun refreshDailyQuests(): Boolean {
         updateAvatarProgression(_plantAvatar.value.currentXp)
-        val todayString = todayDateString ?: getTodayDateString()
+        val todayString = getTodayDateString()
         val lastResetDate = dataStore?.lastResetDateFlow?.first() ?: memoryLastResetDate
 
         if (lastResetDate == null) {

@@ -151,16 +151,6 @@ class AgriQuestViewModel(
     }
 
     /**
-     * Action to simulate next day, resetting the three daily missions.
-     */
-    fun simulateNextDay() {
-        viewModelScope.launch {
-            val quests = repository.resetDailyQuests()
-            _notificationEvents.emit("🌅 Next Day Simulated! ${quests.size} Daily Quests Available!")
-        }
-    }
-
-    /**
      * Action to select plant telemetry source (Offline Emulated vs ESP32 Hardware).
      */
     fun setPlantSource(source: PlantSource) {
@@ -307,7 +297,7 @@ class AgriQuestViewModel(
     }
 
     /**
-     * Action to advance to next question in quiz pool / shuffle quiz for testing.
+     * Action to advance to the next question in the quiz pool.
      */
     fun nextQuizQuestion() {
         repository.nextQuizQuestion()

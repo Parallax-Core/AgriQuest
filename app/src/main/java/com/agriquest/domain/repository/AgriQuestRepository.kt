@@ -82,10 +82,9 @@ interface AgriQuestRepository {
      * - Resets and reshuffles uncompleted daily quests.
      * - Saves today's date in DataStore.
      * - If user missed a day (daysBetween > 1), resets care streak to 0.
-     * @param todayDateString Optional date string formatted as "YYYY-MM-DD" (used for testing/simulation).
      * @return true if daily quests were reset for a new day, false if already reset today.
      */
-    suspend fun checkAndResetMidnightQuests(todayDateString: String? = null): Boolean
+    suspend fun checkAndResetMidnightQuests(): Boolean
 
     /**
      * Updates selected plant telemetry source and persists change.

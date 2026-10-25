@@ -84,9 +84,6 @@ enum class PlantGrowthStage(
             return entries[level.coerceIn(0, entries.lastIndex)]
         }
 
-        fun fromXp(totalXp: Int): PlantGrowthStage =
-            entries.firstOrNull { totalXp < it.maxXp } ?: RIPENING
-
         fun fromName(name: String?): PlantGrowthStage {
             return entries.find { it.name == name } ?: GERMINATION
         }
