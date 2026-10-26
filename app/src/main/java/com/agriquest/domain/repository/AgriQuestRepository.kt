@@ -1,5 +1,6 @@
 package com.agriquest.domain.repository
 
+import android.net.Uri
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
 import com.agriquest.domain.model.AgroQuizQuestion
@@ -149,9 +150,17 @@ interface AgriQuestRepository {
     suspend fun runTfLiteDiagnostic(): String
 
     /**
-     * Triggers leaf camera scan simulation, adding a new diagnostic scan log entry without repeatable XP rewards.
+     * Sends the leaf photo at [photo] (camera or gallery) to the AI Leaf Detector server,
+     * adds the diagnosis to Recent Scans and returns it. Scans give no XP.
+     * @throws java.io.IOException if the photo can't be read or the server can't be reached.
      */
-    suspend fun performCameraScan(): AiScanResult
+    suspend fun performCameraScan(photo: Uri): AiScanResult
+
+    /**
+     * Wakes the AI Leaf Detector server (Render sleeps after 15 idle minutes).
+     * @return true once the server answers.
+     */
+    suspend fun wakeAiServer(): Boolean
 
     /**
      * Adds a care log note entry to the plant journal.

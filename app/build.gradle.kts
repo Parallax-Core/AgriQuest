@@ -1,7 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Leaf Detector server settings. Override them in local.properties (not committed):
+//   agriquest.aiServerUrl=https://agriquest-ai-server.onrender.com
+//   agriquest.aiApiKey=<only if API_KEY is set on Render>
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val aiServerUrl: String = localProperties.getProperty("agriquest.aiServerUrl", "https://agriquest-ai-server.onrender.com")
+val aiApiKey: String = localProperties.getProperty("agriquest.aiApiKey", "")
 
 android {
     namespace = "com.agriquest"
@@ -16,6 +28,8 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        buildConfigField("String", "AI_SERVER_URL", "\"$aiServerUrl\"")
+        buildConfigField("String", "AI_API_KEY", "\"$aiApiKey\"")
     }
 
     buildTypes {
@@ -31,6 +45,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

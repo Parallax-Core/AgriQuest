@@ -1,10 +1,12 @@
 package com.agriquest.ui.viewmodel
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.agriquest.data.remote.LeafDetectorApi
 import com.agriquest.data.repository.AgriQuestRepositoryImpl
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
@@ -20,14 +22,26 @@ import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.repository.AgriQuestRepository
 import com.agriquest.ui.state.AgriQuestUiState
+import com.agriquest.ui.state.LeafScanState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 /**
  * ViewModel managing state management, user actions, leveling progression, and notification side effects.
@@ -96,6 +110,11 @@ class AgriQuestViewModel(
         started = SharingStarted.Eagerly,
         initialValue = AgriQuestUiState()
     )
+
+    // AI leaf scanner state (AI Diagnostics tab)
+    private val _leafScanState = MutableStateFlow(LeafScanState())
+    val leafScanState: StateFlow<LeafScanState> = _leafScanState.asStateFlow()
+    private var wakeJob: Job? = null
 
     init {
         repository.resetQuizState()
@@ -221,13 +240,62 @@ class AgriQuestViewModel(
     }
 
     /**
-     * Action to perform camera leaf scan simulation, logging scan results without repeatable XP rewards.
+     * Wakes the AI Leaf Detector server in the background (called when the AI tab opens),
+     * so it is likely awake by the time the user has taken a photo.
      */
-    fun performCameraScan() {
-        viewModelScope.launch {
-            val scanResult = repository.performCameraScan()
-            _notificationEvents.emit("📸 AI Leaf Scan Complete: ${scanResult.title} (${scanResult.confidence}) ")
+    fun wakeAiServer() {
+        if (_leafScanState.value.serverAwake || wakeJob?.isActive == true) return
+        wakeJob = viewModelScope.launch {
+            if (repository.wakeAiServer()) {
+                _leafScanState.update { it.copy(serverAwake = true) }
+            }
         }
+    }
+
+    /**
+     * Sends the leaf photo at [photo] to the AI Leaf Detector and publishes the result,
+     * or a readable error, through [leafScanState]. Scans give no XP.
+     */
+    fun performCameraScan(photo: Uri) {
+        if (_leafScanState.value.isScanning) return
+        viewModelScope.launch {
+            _leafScanState.update { it.copy(isScanning = true, isSlow = false, error = null) }
+            val slowNotice = launch {
+                delay(SLOW_SCAN_NOTICE_MS)
+                _leafScanState.update { it.copy(isSlow = true) }
+            }
+            try {
+                val scanResult = repository.performCameraScan(photo)
+                _leafScanState.update { it.copy(serverAwake = true, latestResult = scanResult) }
+                _notificationEvents.emit("📸 AI Leaf Scan Complete: ${scanResult.title} (${scanResult.confidence})")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _leafScanState.update { it.copy(error = scanErrorMessage(e)) }
+            } finally {
+                slowNotice.cancel()
+                _leafScanState.update { it.copy(isScanning = false, isSlow = false) }
+            }
+        }
+    }
+
+    /** Hides the last scan error. */
+    fun dismissScanError() {
+        _leafScanState.update { it.copy(error = null) }
+    }
+
+    private fun scanErrorMessage(e: Exception): String = when (e) {
+        is UnknownHostException, is ConnectException, is NoRouteToHostException ->
+            "No internet connection. Check your connection and try again."
+        is SocketTimeoutException ->
+            "The AI server took too long to answer. Please try again."
+        is LeafDetectorApi.ServerException -> when (e.statusCode) {
+            400, 413 -> e.message ?: "The server could not read that photo."
+            401 -> "The AI server rejected the app's API key."
+            else -> "The AI server had a problem (error ${e.statusCode}). Please try again."
+        }
+        is IOException -> e.message ?: "Could not scan that photo. Please try again."
+        else -> "Something went wrong while scanning. Please try again."
     }
 
     /**
@@ -301,5 +369,10 @@ class AgriQuestViewModel(
      */
     fun nextQuizQuestion() {
         repository.nextQuizQuestion()
+    }
+
+    private companion object {
+        /** After this long, the scanner explains that the server may be waking up. */
+        const val SLOW_SCAN_NOTICE_MS = 6_000L
     }
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Folders the FileProvider may share with the camera app (leaf scanner photos). -->
+<paths>
+    <cache-path
+        name="leaf_photos"
+        path="leaf_photos/" />
+</paths>

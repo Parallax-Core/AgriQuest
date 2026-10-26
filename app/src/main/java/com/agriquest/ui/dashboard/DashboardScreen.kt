@@ -1,5 +1,6 @@
 package com.agriquest.ui.dashboard
 
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -31,6 +32,7 @@ import com.agriquest.ui.components.*
 import com.agriquest.ui.plant.PlantDetailsScreenContent
 import com.agriquest.ui.quests.QuestsScreenContent
 import com.agriquest.ui.state.AgriQuestUiState
+import com.agriquest.ui.state.LeafScanState
 import com.agriquest.ui.theme.*
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import kotlinx.coroutines.launch
@@ -47,6 +49,7 @@ fun DashboardScreen(
     viewModel: AgriQuestViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -100,7 +103,10 @@ fun DashboardScreen(
             showEsp32SetupDialog = true
             viewModel.startEsp32BleScan()
         },
-        onPerformScan = { viewModel.performCameraScan() },
+        leafScanState = leafScanState,
+        onScanPhoto = { photo -> viewModel.performCameraScan(photo) },
+        onWakeAiServer = { viewModel.wakeAiServer() },
+        onDismissScanError = { viewModel.dismissScanError() },
         onAddJournalEntry = { note -> viewModel.addJournalEntry(note, JournalCategory.GENERAL) },
         onSetSowingDate = { viewModel.setSowingDate(it) },
         onResetStreak = { viewModel.resetStreak() },
@@ -129,7 +135,10 @@ fun DashboardScreenContent(
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
     onScanForEsp32: () -> Unit = {},
-    onPerformScan: () -> Unit = {},
+    leafScanState: LeafScanState = LeafScanState(),
+    onScanPhoto: (Uri) -> Unit = {},
+    onWakeAiServer: () -> Unit = {},
+    onDismissScanError: () -> Unit = {},
     onAddJournalEntry: (String) -> Unit = {},
     onSetSowingDate: (String) -> Unit = {},
     onResetStreak: () -> Unit = {},
@@ -162,7 +171,10 @@ fun DashboardScreenContent(
             uiState = uiState,
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
-            onPerformScan = onPerformScan,
+            scanState = leafScanState,
+            onScanPhoto = onScanPhoto,
+            onWakeServer = onWakeAiServer,
+            onDismissScanError = onDismissScanError,
             onAddJournalEntry = onAddJournalEntry,
             snackbarHostState = snackbarHostState
         )

@@ -1,8 +1,11 @@
 package com.agriquest.data.repository
 
 import android.content.Context
+import android.net.Uri
 import com.agriquest.data.ble.Esp32BleManager
 import com.agriquest.data.local.AgriQuestDataStore
+import com.agriquest.data.remote.LeafDetectorApi
+import com.agriquest.data.remote.LeafPhotoPreparer
 import com.agriquest.data.simulation.TelemetrySimulationEngine
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
@@ -30,6 +33,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,6 +47,8 @@ class AgriQuestRepositoryImpl(
     private val dataStore: AgriQuestDataStore? = null,
     private val simulationEngine: TelemetrySimulationEngine = TelemetrySimulationEngine(),
     val esp32BleManager: Esp32BleManager = Esp32BleManager(),
+    private val appContext: Context? = null,
+    private val leafDetector: LeafDetectorApi = LeafDetectorApi(),
 ) : AgriQuestRepository {
 
     companion object {
@@ -51,7 +58,8 @@ class AgriQuestRepositoryImpl(
         fun getInstance(context: Context): AgriQuestRepositoryImpl {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: AgriQuestRepositoryImpl(
-                    dataStore = AgriQuestDataStore(context.applicationContext)
+                    dataStore = AgriQuestDataStore(context.applicationContext),
+                    appContext = context.applicationContext
                 ).also { INSTANCE = it }
             }
         }
@@ -570,22 +578,32 @@ class AgriQuestRepositoryImpl(
     }
 
     /**
-     * Triggers leaf camera scan simulation, adding a new diagnostic scan log entry without repeatable XP rewards.
+     * Shrinks the leaf photo, uploads it to the AI Leaf Detector on Render and logs the diagnosis
+     * in Recent Scans. Scanning does not award XP.
      */
-    override suspend fun performCameraScan(): AiScanResult {
-        delay(300L)
+    override suspend fun performCameraScan(photo: Uri): AiScanResult {
+        val context = appContext ?: throw IllegalStateException("Leaf scanning needs the app context.")
+        val id = "scan_${System.currentTimeMillis()}"
+        // Kept in the cache so Recent Scans can show the photo; Android clears it when space runs low.
+        val savedPhoto = File(context.cacheDir, "leaf_photos/$id.jpg")
+        val jpeg = withContext(Dispatchers.IO) { LeafPhotoPreparer.prepare(context, photo, savedPhoto) }
+        val prediction = leafDetector.predict(jpeg)
+        val scannedAt = SimpleDateFormat("MMM d - h:mm a", Locale.getDefault()).format(Date())
         val newScan = AiScanResult(
-            id = "scan_${System.currentTimeMillis()}",
-            title = "Healthy Leaf",
-            subtext = "Leaf 2 (upper canopy) • Just now",
-            confidence = "98%",
-            isHealthy = true
+            id = id,
+            title = prediction.label,
+            subtext = "Scanned $scannedAt",
+            confidence = prediction.confidenceText,
+            isHealthy = prediction.isHealthy,
+            imagePath = savedPhoto.absolutePath,
+            lowConfidence = prediction.lowConfidence,
+            pathogen = prediction.pathogen
         )
-        val updatedScans = listOf(newScan) + _recentScans.value
-        _recentScans.value = updatedScans
-        // Scanning does not award repeatable XP.
+        _recentScans.value = listOf(newScan) + _recentScans.value
         return newScan
     }
+
+    override suspend fun wakeAiServer(): Boolean = leafDetector.wake()
 
     /**
      * Adds a care log note entry to the plant journal.
