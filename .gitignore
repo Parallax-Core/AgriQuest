@@ -1,5 +1,7 @@
 *.iml
 .gradle
+.kotlin/
+/SteamSetup.exe
 /local.properties
 /.idea/caches
 /.idea/libraries

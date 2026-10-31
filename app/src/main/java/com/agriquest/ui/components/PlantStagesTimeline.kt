@@ -1,23 +1,36 @@
 package com.agriquest.ui.components
 
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import com.agriquest.domain.model.PlantGrowthStage
-import com.agriquest.ui.theme.AppLayout
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.agriquest.R
 
-/** Estimated seed-to-harvest windows, not a diagnosis of actual maturity. */
+/** Illustrated seed-to-harvest timeline, in growth order. */
 @Composable
-fun PlantStagesTimeline(stage: PlantGrowthStage) {
-    Column(verticalArrangement = Arrangement.spacedBy(AppLayout.compactSpacing)) {
-        PlantGrowthStage.entries.forEach { item ->
-            AppText("${if (item == stage) "Current:" else ""} ${item.displayName}: ${item.timelineText}",
-                style = MaterialTheme.typography.bodySmall)
+fun PlantStagesTimeline() {
+    val illustrations = listOf(
+        Triple(R.drawable.germination, "Seed germination", 370f / 73f),
+        Triple(R.drawable.seedling, "Seedling", 363f / 73f),
+        Triple(R.drawable.vegetative, "Vegetative growth", 363f / 73f),
+        Triple(R.drawable.flowering, "Flowering", 363f / 73f),
+        Triple(R.drawable.fruiting, "Fruit set and development", 363f / 73f),
+        Triple(R.drawable.harvest, "Ripening and harvesting", 363f / 73f)
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        illustrations.forEach { (drawable, description, ratio) ->
+            Image(
+                painter = painterResource(drawable),
+                contentDescription = description,
+                modifier = Modifier.fillMaxWidth().aspectRatio(ratio),
+                contentScale = ContentScale.Fit
+            )
         }
-        AppText("Estimate: about 120 days from seed. Variety, light and temperature affect timing. Harvest when fruit is ripe.",
-            style = MaterialTheme.typography.bodySmall)
-        AppText("Set your sowing date in Plant Details to match your actual plant.",
-            style = MaterialTheme.typography.bodySmall)
     }
 }

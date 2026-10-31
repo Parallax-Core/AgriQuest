@@ -238,7 +238,7 @@ fun HomeDashboardContent(
             TelemetryGrid(telemetry = uiState.telemetry, compact = true, embedded = true)
             HorizontalDivider(color = AppCardBorder)
             PixelHeading("Tomato Stages")
-            PlantStagesTimeline(uiState.plant.growthStage)
+            PlantStagesTimeline()
             HorizontalDivider(color = AppCardBorder)
             PixelHeading("Today's Quests", trailing = {
                 PixelChip("${uiState.quests.count { it.isClaimed }}/${uiState.quests.size} Completed")

@@ -37,7 +37,7 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
             PixelHeading("Growth Timeline")
             Text("Estimated growth based on sowing date. Confirm stages by observing your plant.",
                 style = MaterialTheme.typography.bodySmall, color = AppTextColor)
-            PlantStagesTimeline(uiState.plant.growthStage)
+            PlantStagesTimeline()
             PixelButton("Set sowing date", { editingDate = true },
                 modifier = Modifier.align(Alignment.CenterHorizontally))
         }
