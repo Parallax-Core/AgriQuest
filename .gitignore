@@ -15,3 +15,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+# ESP32 Wi-Fi password and device token
+firmware/agriquest_esp32/secrets.h

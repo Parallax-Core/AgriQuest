@@ -11,6 +11,8 @@ import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.WateringStatus
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -55,6 +57,12 @@ interface AgriQuestRepository {
 
     /** Flow of result correctness for selected quiz option (or null if uncompleted). */
     val isQuizAnswerCorrect: StateFlow<Boolean?>
+
+    /** Email of the logged-in Supabase account, or null when logged out. */
+    val accountEmail: StateFlow<String?>
+
+    /** Logs the player out of Supabase on this phone; the app returns to the login screen. */
+    suspend fun logout()
 
     /**
      * Increases care XP by up to [amount], subject to the persisted daily cap,
@@ -119,6 +127,13 @@ interface AgriQuestRepository {
         durationSeconds: Int = 3,
         onNotification: (String) -> Unit = {}
     )
+
+    /**
+     * Waters the plant for [seconds] and reports progress.
+     * Live IoT mode: sends a pump command through Supabase (safety-checked by the database) and
+     * follows it until the ESP32 reports it done. Emulated mode: uses the simulated pump.
+     */
+    fun waterPlant(seconds: Int = 5): Flow<WateringStatus>
 
     /**
      * Toggles fan mode, cycling through AUTO -> ON -> OFF -> AUTO.

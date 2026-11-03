@@ -20,12 +20,15 @@ import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.WateringStatus
 import com.agriquest.domain.repository.AgriQuestRepository
 import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.state.LeafScanState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -34,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -111,6 +115,24 @@ class AgriQuestViewModel(
         initialValue = AgriQuestUiState()
     )
 
+    /** Email of the logged-in account, shown in the Home settings. */
+    val accountEmail: StateFlow<String?> = repository.accountEmail
+
+    /** Logs out; MainActivity then shows the login screen. */
+    fun logout() {
+        viewModelScope.launch { repository.logout() }
+    }
+
+    // Water Plant button progress (Plant tab); null when idle.
+    private val _wateringStatus = MutableStateFlow<WateringStatus?>(null)
+    val wateringStatus: StateFlow<WateringStatus?> = _wateringStatus.asStateFlow()
+
+    /** Emits the soil moisture (%) each time the soil becomes too dry; the screen shows a phone notification. */
+    // A channel keeps the alert until the screen collects it (e.g. the app opens with dry soil).
+    private val _dryAlerts = Channel<Int>(Channel.BUFFERED)
+    val dryAlerts: Flow<Int> = _dryAlerts.receiveAsFlow()
+    private var dryAlertArmed = true
+
     // AI leaf scanner state (AI Diagnostics tab)
     private val _leafScanState = MutableStateFlow(LeafScanState())
     val leafScanState: StateFlow<LeafScanState> = _leafScanState.asStateFlow()
@@ -119,6 +141,7 @@ class AgriQuestViewModel(
     init {
         repository.resetQuizState()
         checkAndResetMidnightQuests()
+        watchForDrySoil()
     }
 
     /**
@@ -371,7 +394,52 @@ class AgriQuestViewModel(
         repository.nextQuizQuestion()
     }
 
+    /**
+     * Alerts once when soil moisture falls below [TelemetryData.WATERING_THRESHOLD] (45%).
+     * It re-arms only after the soil is back above 50%, so readings hovering around 45% don't spam.
+     */
+    private fun watchForDrySoil() {
+        viewModelScope.launch {
+            repository.telemetryData.collect { telemetry ->
+                if (telemetry.needsWatering) {
+                    if (dryAlertArmed) {
+                        dryAlertArmed = false
+                        val percent = telemetry.soilMoisture.toInt()
+                        _dryAlerts.send(percent)
+                        _notificationEvents.emit("\uD83E\uDD40 Your plant is too dry ($percent%). Water it now!")
+                    }
+                } else if (telemetry.soilMoisture >= TelemetryData.WATERING_THRESHOLD + DRY_ALERT_RESET_MARGIN) {
+                    dryAlertArmed = true
+                }
+            }
+        }
+    }
+
+    /** Water Plant button: runs the pump for [WATERING_SECONDS] and publishes progress in [wateringStatus]. */
+    fun waterPlant() {
+        if (_wateringStatus.value?.isBusy == true) return
+        viewModelScope.launch {
+            var last: WateringStatus? = null
+            repository.waterPlant(WATERING_SECONDS).collect { status ->
+                last = status
+                _wateringStatus.value = status
+            }
+            last?.let { _notificationEvents.emit(it.message) }
+            delay(WATERING_MESSAGE_MS)
+            if (_wateringStatus.value == last) _wateringStatus.value = null
+        }
+    }
+
     private companion object {
+        /** How long one Water Plant tap runs the pump (the database allows up to 5 s by default). */
+        const val WATERING_SECONDS = 5
+
+        /** How long the final watering message stays under the button. */
+        const val WATERING_MESSAGE_MS = 8_000L
+
+        /** Soil must be this many % above the threshold before a new dry alert can fire. */
+        const val DRY_ALERT_RESET_MARGIN = 5f
+
         /** After this long, the scanner explains that the server may be waking up. */
         const val SLOW_SCAN_NOTICE_MS = 6_000L
     }

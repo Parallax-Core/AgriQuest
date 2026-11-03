@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Eco
+import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,11 +21,14 @@ import com.agriquest.domain.model.*
 import com.agriquest.ui.components.*
 import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.theme.*
+import kotlin.math.roundToInt
 
 @Composable
 fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestUiState = AgriQuestUiState(),
     selectedTab: Int = 1, onTabSelected: (Int) -> Unit = {},
-    onAddJournalEntry: (String) -> Unit = {}, onSetSowingDate: (String) -> Unit = {}, snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }) {
+    onAddJournalEntry: (String) -> Unit = {}, onSetSowingDate: (String) -> Unit = {},
+    wateringStatus: WateringStatus? = null, onWaterPlant: () -> Unit = {},
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }) {
     var editingDate by remember { mutableStateOf(false) }
     var sowingDate by remember(uiState.plant.sowingDate) { mutableStateOf(uiState.plant.sowingDate) }
     var journal by remember { mutableStateOf(false) }
@@ -33,6 +37,7 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
     AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
         PixelPageHeader(uiState.plant.title.replace("🍅", "").trim(), "Plant Details", uiState)
         PlantHeroCard(uiState.plant)
+        if (uiState.telemetry.needsWatering) DrySoilBanner(uiState.telemetry.soilMoisture)
         PixelPanel {
             PixelHeading("Growth Timeline")
             Text("Estimated growth based on sowing date. Confirm stages by observing your plant.",
@@ -64,6 +69,7 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
                     PixelChip(if (uiState.plantSource == PlantSource.ESP32_HARDWARE) "● ESP32: ${uiState.connection.statusText}" else "● Emulated")
                 })
                 TelemetryGrid(telemetry = uiState.telemetry, showTitle = false, embedded = true)
+                WaterPlantSection(uiState.telemetry, wateringStatus, onWaterPlant)
             }
             MoistureHistorySection(uiState.moistureHistory)
             PixelPanel {
@@ -113,6 +119,55 @@ fun PlantHeroCard(plant: PlantAvatar, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.labelSmall, color = AppTextColor)
             }
         }
+    }
+}
+
+private val DryRed = Color(0xFFB53220)
+private val WaterBlue = Color(0xFF318CAD)
+
+/** Shown at the top of the Plant tab while soil moisture is below 45%. */
+@Composable
+private fun DrySoilBanner(moisture: Float) {
+    Surface(Modifier.fillMaxWidth(), color = Color(0xFFFFD6CB), shape = RoundedCornerShape(3.dp),
+        border = BorderStroke(1.dp, DryRed)) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(Icons.Rounded.WaterDrop, null, Modifier.size(28.dp), tint = DryRed)
+            Column(Modifier.weight(1f)) {
+                Text("PLANT IS TOO DRY", style = MaterialTheme.typography.titleSmall, color = DryRed)
+                Text("Soil moisture is ${moisture.roundToInt()}% (below ${TelemetryData.WATERING_THRESHOLD.roundToInt()}%). " +
+                    "Water your plant now.", style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+            }
+        }
+    }
+}
+
+/**
+ * Water Plant button under the readings. Only clickable when the soil is too dry (below 45%)
+ * and no watering is already in progress; shows each step of the pump command underneath.
+ */
+@Composable
+private fun WaterPlantSection(telemetry: TelemetryData, status: WateringStatus?, onWaterPlant: () -> Unit) {
+    val needsWater = telemetry.needsWatering
+    val busy = status?.isBusy == true
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Button(onClick = onWaterPlant, enabled = needsWater && !busy,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp), shape = AppLayout.buttonShape,
+            colors = ButtonDefaults.buttonColors(containerColor = WaterBlue, contentColor = AppCardBackground,
+                disabledContainerColor = Color(0xFFCFC6B4), disabledContentColor = Color(0xFF7A6A55))) {
+            Icon(Icons.Rounded.WaterDrop, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(if (busy) "WATERING…" else "WATER PLANT", style = MaterialTheme.typography.labelLarge)
+        }
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = WaterBlue)
+        val hint = status?.message ?: if (needsWater) {
+            "Soil is dry. Tap to water for 5 seconds."
+        } else {
+            "Watering unlocks when soil moisture drops below " +
+                "${TelemetryData.WATERING_THRESHOLD.roundToInt()}% (now ${telemetry.soilMoisture.roundToInt()}%)."
+        }
+        Text(hint, style = MaterialTheme.typography.bodySmall,
+            color = if (status?.phase == WateringStatus.Phase.FAILED) DryRed else AppTextColor)
     }
 }
 
