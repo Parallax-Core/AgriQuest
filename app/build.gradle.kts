@@ -14,6 +14,9 @@ val localProperties = Properties().apply {
 }
 val aiServerUrl: String = localProperties.getProperty("agriquest.aiServerUrl", "https://agriquest-ai-server.onrender.com")
 val aiApiKey: String = localProperties.getProperty("agriquest.aiApiKey", "")
+// Supabase public client configuration lives in untracked local.properties.
+val supabaseUrl: String = localProperties.getProperty("agriquest.supabaseUrl", "")
+val supabaseAnonKey: String = localProperties.getProperty("agriquest.supabaseAnonKey", "")
 
 android {
     namespace = "com.agriquest"
@@ -30,6 +33,8 @@ android {
 
         buildConfigField("String", "AI_SERVER_URL", "\"$aiServerUrl\"")
         buildConfigField("String", "AI_API_KEY", "\"$aiApiKey\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
@@ -50,6 +55,7 @@ android {
 }
 
 dependencies {
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material.icons.core)

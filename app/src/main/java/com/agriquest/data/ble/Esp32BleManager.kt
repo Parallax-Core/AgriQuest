@@ -29,6 +29,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
+import com.agriquest.domain.model.DevicePairingProof
+import com.agriquest.domain.model.Esp32DiscoveredDevice
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 import java.util.UUID
@@ -56,6 +61,11 @@ class Esp32BleManager(
 
     private var bluetoothGatt: BluetoothGatt? = null
     private var targetCharacteristic: BluetoothGattCharacteristic? = null
+    private var connectOnDiscovery = true
+    private var pairingReady: CompletableDeferred<Unit>? = null
+    private var pairingResult: CompletableDeferred<DevicePairingProof>? = null
+    private val _discoveredDevices = MutableStateFlow<List<Esp32DiscoveredDevice>>(emptyList())
+    val discoveredDevices = _discoveredDevices.asStateFlow()
 
     private val _connectionState = MutableStateFlow(
         ConnectionState(
@@ -75,8 +85,12 @@ class Esp32BleManager(
             result?.device?.let { device ->
                 val deviceName = try { device.name ?: "ESP32" } catch (_: SecurityException) { "ESP32" }
                 if (deviceName.contains("ESP32", ignoreCase = true) || deviceName.contains("AgriQuest", ignoreCase = true)) {
-                    stopScan()
-                    connectToDevice(device)
+                    val discovered = Esp32DiscoveredDevice(deviceName, device.address, SERVICE_UUID.toString(), result.rssi)
+                    _discoveredDevices.value = _discoveredDevices.value.filterNot { it.macAddress == discovered.macAddress } + discovered
+                    if (connectOnDiscovery) {
+                        stopScan()
+                        connectToDevice(device)
+                    }
                 }
             }
         }
@@ -92,15 +106,34 @@ class Esp32BleManager(
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 updateConnectionStatus(ConnectionStatus.CONNECTING, "Discovering Services...")
                 try {
-                    gatt?.discoverServices()
+                    if (pairingReady != null) {
+                        if (gatt?.requestMtu(247) != true) pairingReady?.completeExceptionally(IllegalStateException("Could not negotiate secure pairing transport."))
+                    } else gatt?.discoverServices()
                 } catch (e: SecurityException) {
                     updateConnectionStatus(ConnectionStatus.AWAITING_DEVICE, "Permission Denied")
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                pairingReady?.completeExceptionally(IllegalStateException("Device disconnected during pairing."))
+                pairingResult?.completeExceptionally(IllegalStateException("Device disconnected during pairing."))
                 bluetoothGatt?.close()
                 bluetoothGatt = null
                 targetCharacteristic = null
                 updateConnectionStatus(ConnectionStatus.DISCONNECTED, "Disconnected")
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+            if (pairingReady != null) {
+                if (status == BluetoothGatt.GATT_SUCCESS && mtu >= 200) gatt.discoverServices()
+                else pairingReady?.completeExceptionally(IllegalStateException("Firmware must support BLE MTU 247 for secure pairing."))
+            }
+        }
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            if (descriptor.uuid == CCCD_UUID) {
+                if (status == BluetoothGatt.GATT_SUCCESS) pairingReady?.complete(Unit)
+                else pairingReady?.completeExceptionally(IllegalStateException("Could not subscribe to pairing responses."))
             }
         }
 
@@ -117,10 +150,13 @@ class Esp32BleManager(
                         if (descriptor != null) {
                             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
                             gatt.writeDescriptor(descriptor)
+                        } else if (pairingReady != null) {
+                            pairingReady?.completeExceptionally(IllegalStateException("Secure pairing notifications are unavailable."))
                         }
                     } catch (_: SecurityException) { }
                     updateConnectionStatus(ConnectionStatus.CONNECTED, "Connected")
                 } else {
+                    pairingReady?.completeExceptionally(IllegalStateException("Secure pairing characteristic is unavailable."))
                     updateConnectionStatus(ConnectionStatus.CONNECTED, "Connected (GATT Ready)")
                 }
             } else {
@@ -152,7 +188,9 @@ class Esp32BleManager(
      * Starts scanning for nearby ESP32 BLE hardware filtered by name or Service UUID.
      */
     @SuppressLint("MissingPermission")
-    fun startScan() {
+    fun startScan(autoConnect: Boolean = true) {
+        connectOnDiscovery = autoConnect
+        _discoveredDevices.value = emptyList()
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
             updateConnectionStatus(ConnectionStatus.AWAITING_DEVICE, "Awaiting ESP32 Hardware")
             return
@@ -176,6 +214,35 @@ class Esp32BleManager(
             }
         }.onFailure {
             updateConnectionStatus(ConnectionStatus.AWAITING_DEVICE, "Awaiting ESP32 Hardware")
+        }
+    }
+
+    /** Keeps the existing BLE service; firmware gates this response on button + MITM-authenticated bonding. */
+    @SuppressLint("MissingPermission")
+    suspend fun requestPairingProof(macAddress: String): DevicePairingProof = withTimeout(90_000) {
+        require(_discoveredDevices.value.any { it.macAddress == macAddress }) { "Scan and select the physical device first." }
+        val device = bluetoothAdapter?.getRemoteDevice(macAddress)
+            ?: throw IllegalStateException("Bluetooth is unavailable.")
+        stopScan()
+        disconnect()
+        val ready = CompletableDeferred<Unit>()
+        val result = CompletableDeferred<DevicePairingProof>()
+        pairingReady = ready
+        pairingResult = result
+        try {
+            updateConnectionStatus(ConnectionStatus.CONNECTING, "Authorize Bluetooth pairing and press the device pairing button")
+            if (device.bondState == BluetoothDevice.BOND_NONE && !device.createBond()) {
+                throw IllegalStateException("Bluetooth bonding could not start.")
+            }
+            while (device.bondState != BluetoothDevice.BOND_BONDED) delay(250)
+            connectToDevice(device)
+            ready.await()
+            sendCommand("{\"type\":\"pairing_request\",\"version\":1}")
+            withTimeout(20_000) { result.await() }
+        } finally {
+            pairingReady = null
+            pairingResult = null
+            disconnect()
         }
     }
 
@@ -255,6 +322,19 @@ class Esp32BleManager(
      * Processes incoming raw payload String from ESP32 BLE notification.
      */
     fun processIncomingPayload(payload: String) {
+        if (pairingResult != null) {
+            val json = runCatching { JSONObject(payload) }.getOrNull()
+            if (json?.optString("type") == "pairing_proof") {
+                runCatching { DevicePairingProof.parse(payload) }
+                    .onSuccess { pairingResult?.complete(it) }
+                    .onFailure { pairingResult?.completeExceptionally(IllegalStateException("Firmware returned an invalid pairing proof.")) }
+                return
+            }
+            if (json?.optString("type") == "pairing_error") {
+                pairingResult?.completeExceptionally(IllegalStateException("Press the physical pairing button and authorize secure Bluetooth bonding."))
+                return
+            }
+        }
         val telemetry = parseTelemetryJson(payload)
         if (telemetry != null) {
             scope.launch {

@@ -6,6 +6,9 @@ import com.agriquest.data.ble.Esp32BleManager
 import com.agriquest.data.local.AgriQuestDataStore
 import com.agriquest.data.remote.LeafDetectorApi
 import com.agriquest.data.remote.LeafPhotoPreparer
+import com.agriquest.data.remote.AuthSession
+import com.agriquest.data.remote.SupabasePlantApi
+import com.agriquest.data.remote.PlantMonitoringBinding
 import com.agriquest.data.simulation.TelemetrySimulationEngine
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
@@ -25,6 +28,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
@@ -38,6 +46,9 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.agriquest.domain.model.DetectedPlantIdentity
+
+enum class ProgressSyncStatus { SAVED, PENDING, SYNCING, OFFLINE }
 
 /**
  * Implementation of [AgriQuestRepository] managing live domain state, leveling progression,
@@ -49,23 +60,38 @@ class AgriQuestRepositoryImpl(
     val esp32BleManager: Esp32BleManager = Esp32BleManager(),
     private val appContext: Context? = null,
     private val leafDetector: LeafDetectorApi = LeafDetectorApi(),
+    private val accountApi: SupabasePlantApi? = null,
+    private val accountId: String? = null,
+    private val plantId: String? = null,
 ) : AgriQuestRepository {
 
     companion object {
-        @Volatile
-        private var INSTANCE: AgriQuestRepositoryImpl? = null
-
-        fun getInstance(context: Context): AgriQuestRepositoryImpl {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: AgriQuestRepositoryImpl(
-                    dataStore = AgriQuestDataStore(context.applicationContext),
-                    appContext = context.applicationContext
-                ).also { INSTANCE = it }
-            }
+        suspend fun forAccount(context: Context, session: AuthSession): AgriQuestRepositoryImpl {
+            val store = AgriQuestDataStore(context.applicationContext, session.userId)
+            val api = SupabasePlantApi(session)
+            val cloud = api.loadProgress()
+            store.restoreCloud(cloud)
+            val repository = AgriQuestRepositoryImpl(dataStore = store, appContext = context.applicationContext,
+                accountApi = api, accountId = session.userId, plantId = cloud.plantId,
+                esp32BleManager = Esp32BleManager(context.applicationContext))
+            try { repository.initialized.await() } catch (e: Exception) { repository.close(); throw e }
+            try { repository._loginDays.value = api.recordAccountLogin() }
+            catch (e: CancellationException) { repository.close(); throw e }
+            catch (_: Exception) { /* Fail closed without blocking authentication/progress. */ }
+            return repository
         }
     }
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val _syncStatus = MutableStateFlow(ProgressSyncStatus.SAVED)
+    val syncStatus = _syncStatus.asStateFlow()
+    private val _loginDays = MutableStateFlow(0)
+    val loginDays = _loginDays.asStateFlow()
+    private var monitoringBinding: PlantMonitoringBinding? = null
+    private val pairingMutex = Mutex()
+    private var pairingInProgress = false
+    val discoveredDevices get() = esp32BleManager.discoveredDevices
+    private var detectedStage: PlantGrowthStage? = null
 
     private val initialized = CompletableDeferred<Unit>()
     private val claimMutex = Mutex()
@@ -104,7 +130,8 @@ class AgriQuestRepositoryImpl(
             streakDays = 0,
             targetStreakDays = 7,
             sowingDate = trackingStart,
-            speechBubble = PlantGrowthStage.GERMINATION.speechBubble
+            speechBubble = PlantGrowthStage.GERMINATION.speechBubble,
+            journalEntries = emptyList(), moistureHistory = emptyList()
         )
     )
     override val plantAvatar: StateFlow<PlantAvatar> = _plantAvatar.asStateFlow()
@@ -115,7 +142,7 @@ class AgriQuestRepositoryImpl(
     private val _activeQuest = MutableStateFlow(_quests.value.first())
     override val activeQuest: StateFlow<Quest> = _activeQuest.asStateFlow()
 
-    private val _achievements = MutableStateFlow(Achievement.DEFAULT_ACHIEVEMENTS)
+    private val _achievements = MutableStateFlow(Achievement.DEFAULT_ACHIEVEMENTS.map { it.copy(isUnlocked = false, earnedDate = null) })
     override val achievements: StateFlow<List<Achievement>> = _achievements.asStateFlow()
 
     private val _plantSource = MutableStateFlow(PlantSource.EMULATED_OFFLINE)
@@ -161,18 +188,21 @@ class AgriQuestRepositoryImpl(
         // Load initial state from DataStore if available
         dataStore?.let { store ->
             scope.launch {
-                runCatching {
+                try {
                     trackingStart = store.trackingStartFlow.first() ?: getTodayDateString().also { store.saveTrackingStart(it) }
                     xpDate = store.xpDateFlow.first() ?: getTodayDateString()
                     earnedToday = store.dailyXpFlow.first()
                     quizRewardDate = store.quizCompletedDateFlow.first()
                     val xp = store.currentXpFlow.first()
                     val source = store.plantSourceFlow.first()
+                    detectedStage = store.growthStageFlow.first().takeIf { it.stageLevel > 0 }
                     val streak = store.streakDaysFlow.first()
                     val claimedIds = store.claimedQuestIdsFlow.first()
                     val savedJournal = store.journalNotesFlow.first()
                     val savedTelemetry = store.telemetryDataFlow.first()
                     val savedLastResetDate = store.lastResetDateFlow.first()
+                    _plantAvatar.value = _plantAvatar.value.copy(name = store.plantNameFlow.first())
+                    _recentScans.value = store.recentScansFlow.first()
 
                     memoryLastResetDate = savedLastResetDate
                     _plantSource.value = source
@@ -197,13 +227,87 @@ class AgriQuestRepositoryImpl(
                     } else {
                         bindBleHardwareState()
                     }
+                    store.markForSync()
+                    initialized.complete(Unit)
+                } catch (e: Exception) {
+                    initialized.completeExceptionally(e)
+                    if (e is CancellationException) throw e
                 }
-                initialized.complete(Unit)
             }
         } ?: run {
             initialized.complete(Unit)
             startSimulationRoutine()
         }
+        if (accountApi != null && dataStore != null) scope.launch {
+            initialized.await()
+            dataStore.cloudDirtyFlow.collect { dirty ->
+                if (dirty) {
+                    delay(500)
+                    while (isActive && dataStore.cloudDirtyFlow.first()) {
+                        try {
+                            _syncStatus.value = ProgressSyncStatus.SYNCING
+                            val (revision, progress) = dataStore.pendingProgress()
+                            accountApi.saveProgress(progress)
+                            dataStore.acknowledgeSync(revision)
+                            _syncStatus.value = if (dataStore.cloudDirtyFlow.first()) ProgressSyncStatus.PENDING else ProgressSyncStatus.SAVED
+                        } catch (e: CancellationException) { throw e }
+                        catch (_: Exception) { _syncStatus.value = ProgressSyncStatus.OFFLINE; delay(15_000) }
+                    }
+                }
+            }
+        }
+    }
+
+    fun close() {
+        scope.cancel()
+        accountApi?.cancelRequests()
+        esp32BleManager.stopScan()
+        esp32BleManager.disconnect()
+    }
+
+    suspend fun pairEsp32Device(macAddress: String) = pairingMutex.withLock {
+        initialized.await()
+        scope.coroutineContext.ensureActive()
+        val api = accountApi ?: throw IllegalStateException("Log in before pairing hardware.")
+        val activePlantId = plantId ?: throw IllegalStateException("Select an owned plant first.")
+        pairingInProgress = true
+        val statusJob = scope.launch {
+            esp32BleManager.connectionState.collect { status ->
+                _connectionState.value = if (status.status == ConnectionStatus.CONNECTED) status.copy(
+                    status = ConnectionStatus.CONNECTING, statusText = "Verifying device ownership...") else status
+            }
+        }
+        try {
+            val proof = esp32BleManager.requestPairingProof(macAddress)
+            statusJob.cancel()
+            _connectionState.value = ConnectionState(deviceName = proof.deviceId,
+                status = ConnectionStatus.CONNECTING, statusText = "Verifying device ownership...")
+            val existing = api.listDevices().firstOrNull { it.deviceId == proof.deviceId }
+            if (existing?.plantId != null && existing.plantId != activePlantId) {
+                throw IllegalStateException("Select this device's assigned plant before reconnecting.")
+            }
+            monitoringBinding = api.pairDevice(activePlantId, proof)
+            _connectionState.value = ConnectionState(deviceName = proof.deviceId,
+                status = ConnectionStatus.AWAITING_DEVICE, statusText = "Paired; awaiting ESP32 readings")
+        } finally {
+            statusJob.cancel()
+            pairingInProgress = false
+        }
+    }
+
+    /** Future firmware/vision integration: never called automatically by ordinary telemetry. */
+    suspend fun applyDetectedPlantIdentity(identity: DetectedPlantIdentity): Boolean {
+        initialized.await()
+        scope.coroutineContext.ensureActive()
+        if (identity.accountId != accountId || identity.plantId != plantId || accountApi == null) return false
+        val binding = accountApi.monitoringBinding(plantId) ?: return false
+        if (binding.deviceId != identity.deviceId) return false
+        if (identity.sowingDate != null && !setSowingDate(identity.sowingDate)) return false
+        detectedStage = identity.estimatedStage ?: detectedStage
+        updateAvatarProgression(_plantAvatar.value.currentXp)
+        dataStore?.saveUserProgression(_plantAvatar.value.levelInt, _plantAvatar.value.currentXp, _plantAvatar.value.growthStage)
+        dataStore?.markForSync()
+        return true
     }
 
     private fun startSimulationRoutine() {
@@ -213,7 +317,7 @@ class AgriQuestRepositoryImpl(
         _connectionState.value = ConnectionState(
             deviceName = "ESP32",
             status = ConnectionStatus.CONNECTED,
-            statusText = "Connected"
+            statusText = "Offline simulation"
         )
 
         simulationJob = scope.launch {
@@ -233,6 +337,29 @@ class AgriQuestRepositoryImpl(
     private fun bindBleHardwareState() {
         stopSimulationRoutine()
         stopBleHardwareBinding()
+
+        if (accountApi != null && plantId != null) {
+            bleTelemetryJob = scope.launch {
+                while (isActive) {
+                    if (pairingInProgress) { delay(250); continue }
+                    try {
+                        monitoringBinding = accountApi.monitoringBinding(plantId, monitoringBinding?.deviceId)
+                        val binding = monitoringBinding
+                        val reading = binding?.let { accountApi.latestReading(it) }
+                        if (reading != null) {
+                            _telemetryData.value = reading.telemetry
+                            dataStore?.saveTelemetryData(reading.telemetry)
+                        }
+                        _connectionState.value = ConnectionState(deviceName = binding?.deviceId ?: "ESP32",
+                            status = if (reading?.isFresh() == true) ConnectionStatus.CONNECTED else ConnectionStatus.AWAITING_DEVICE,
+                            statusText = if (reading != null) "Last reading: ${reading.recordedAt}" else "Awaiting paired ESP32 data")
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { _connectionState.value = ConnectionState(status = ConnectionStatus.DISCONNECTED, statusText = "ESP32 monitoring offline") }
+                    delay(10_000)
+                }
+            }
+            return
+        }
 
         bleStateJob = scope.launch {
             esp32BleManager.connectionState.collect { newState ->
@@ -256,11 +383,13 @@ class AgriQuestRepositoryImpl(
         bleStateJob = null
         bleTelemetryJob?.cancel()
         bleTelemetryJob = null
+        monitoringBinding = null
     }
 
     override fun startEsp32BleScan() {
-        if (_plantSource.value == PlantSource.ESP32_HARDWARE) {
-            esp32BleManager.startScan()
+        if (_plantSource.value == PlantSource.ESP32_HARDWARE && !pairingInProgress) {
+            esp32BleManager.startScan(autoConnect = accountApi == null)
+            scope.launch { delay(10_000); esp32BleManager.stopScan() }
         }
     }
 
@@ -318,7 +447,8 @@ class AgriQuestRepositoryImpl(
     }
 
     private fun calculateLevelAndStage(): Triple<Int, PlantGrowthStage, Int> {
-        val stage = PlantGrowthStage.fromDays(calculateDaysBetween(trackingStart, getTodayDateString()).toInt().coerceAtLeast(0))
+        val estimated = PlantGrowthStage.fromDays(calculateDaysBetween(trackingStart, getTodayDateString()).toInt().coerceAtLeast(0))
+        val stage = detectedStage?.takeIf { it.stageLevel > estimated.stageLevel } ?: estimated
         return Triple(stage.stageLevel, stage, stage.maxXp)
     }
 
@@ -331,6 +461,8 @@ class AgriQuestRepositoryImpl(
         trackingStart = date
         dataStore?.saveTrackingStart(date)
         updateAvatarProgression(_plantAvatar.value.currentXp)
+        dataStore?.saveUserProgression(_plantAvatar.value.levelInt, _plantAvatar.value.currentXp, _plantAvatar.value.growthStage)
+        dataStore?.markForSync()
         return true
     }
 
@@ -350,6 +482,7 @@ class AgriQuestRepositoryImpl(
         dataStore?.saveXpLedger(today, earnedToday, total)
         updateAvatarProgression(total)
         dataStore?.saveUserProgression(_plantAvatar.value.levelInt, total, _plantAvatar.value.growthStage)
+        dataStore?.markForSync()
     }
 
     override suspend fun claimQuest(questId: String): Boolean = claimMutex.withLock {
@@ -392,6 +525,7 @@ class AgriQuestRepositoryImpl(
         _quests.value = newDailyQuests
         updateActiveQuest(newDailyQuests)
         dataStore?.clearClaimedQuestIds()
+        dataStore?.markForSync()
         return newDailyQuests
     }
 
@@ -429,6 +563,7 @@ class AgriQuestRepositoryImpl(
         if (lastResetDate == null) {
             memoryLastResetDate = todayString
             dataStore?.saveLastResetDate(todayString)
+            dataStore?.markForSync()
             resetQuizState()
             return true
         } else if (todayString > lastResetDate) {
@@ -463,6 +598,7 @@ class AgriQuestRepositoryImpl(
         _streakDays.value = streakDays
         _plantAvatar.value = _plantAvatar.value.copy(streakDays = streakDays)
         dataStore?.saveStreakDays(streakDays)
+        dataStore?.markForSync()
     }
 
     override suspend fun incrementStreak() {
@@ -470,12 +606,14 @@ class AgriQuestRepositoryImpl(
         _streakDays.value = newStreak
         _plantAvatar.value = _plantAvatar.value.copy(streakDays = newStreak)
         dataStore?.incrementStreak()
+        dataStore?.markForSync()
     }
 
     override suspend fun resetStreak() {
         _streakDays.value = 0
         _plantAvatar.value = _plantAvatar.value.copy(streakDays = 0)
         dataStore?.resetStreak()
+        dataStore?.markForSync()
     }
 
     override suspend fun triggerPump(
@@ -483,6 +621,12 @@ class AgriQuestRepositoryImpl(
         onNotification: (String) -> Unit
     ) {
         if (_actuatorState.value.isPumpActive) return
+        if (_plantSource.value == PlantSource.ESP32_HARDWARE && accountApi != null) {
+            val binding = monitoringBinding ?: throw IllegalStateException("Pair an ESP32 with this account's plant first.")
+            accountApi.requestCommand(binding, "pump", durationSeconds)
+            onNotification("Watering request sent to your paired ESP32. Waiting for sensor readings.")
+            return
+        }
 
         // 1. Restores soil moisture by +15% (capped at 100.0%)
         val updatedTelemetry = simulationEngine.restoreMoistureFromPump(_telemetryData.value)
@@ -545,6 +689,7 @@ class AgriQuestRepositoryImpl(
     }
 
     override fun toggleFanMode() {
+        if (_plantSource.value == PlantSource.ESP32_HARDWARE && accountApi != null) return
         val nextMode = _actuatorState.value.fanMode.next()
         _actuatorState.value = _actuatorState.value.copy(fanMode = nextMode)
 
@@ -557,6 +702,7 @@ class AgriQuestRepositoryImpl(
      * BLE / IoT Connectivity Hook: Call when new sensor data packet arrives from ESP32 BLE peripheral.
      */
     override fun updateTelemetryFromBle(newData: TelemetryData) {
+        if (accountApi != null) return // Authenticated monitoring accepts only the paired, RLS-filtered sensor path.
         _telemetryData.value = newData
         scope.launch { dataStore?.saveTelemetryData(newData) }
         updateQuestProgressForTelemetry(newData)
@@ -566,6 +712,7 @@ class AgriQuestRepositoryImpl(
      * BLE / IoT Connectivity Hook: Call when device connection status changes.
      */
     override fun updateConnectionStatus(connectionState: ConnectionState) {
+        if (accountApi != null) return
         _connectionState.value = connectionState
     }
 
@@ -573,6 +720,7 @@ class AgriQuestRepositoryImpl(
      * TFLite Model Hook: Executes plant health diagnostic classification inference on device.
      */
     override suspend fun runTfLiteDiagnostic(): String {
+        requireAiAccess()
         delay(300L)
         return "🌿 AI Diagnostic: Leaf health optimal (98.2% confidence). Soil moisture & light conditions ideal."
     }
@@ -582,10 +730,11 @@ class AgriQuestRepositoryImpl(
      * in Recent Scans. Scanning does not award XP.
      */
     override suspend fun performCameraScan(photo: Uri): AiScanResult {
+        requireAiAccess()
         val context = appContext ?: throw IllegalStateException("Leaf scanning needs the app context.")
         val id = "scan_${System.currentTimeMillis()}"
         // Kept in the cache so Recent Scans can show the photo; Android clears it when space runs low.
-        val savedPhoto = File(context.cacheDir, "leaf_photos/$id.jpg")
+        val savedPhoto = File(context.filesDir, "accounts/${accountId ?: "preview"}/leaf_photos/$id.jpg")
         val jpeg = withContext(Dispatchers.IO) { LeafPhotoPreparer.prepare(context, photo, savedPhoto) }
         val prediction = leafDetector.predict(jpeg)
         val scannedAt = SimpleDateFormat("MMM d - h:mm a", Locale.getDefault()).format(Date())
@@ -600,10 +749,21 @@ class AgriQuestRepositoryImpl(
             pathogen = prediction.pathogen
         )
         _recentScans.value = listOf(newScan) + _recentScans.value
+        dataStore?.saveScans(_recentScans.value)
         return newScan
     }
 
-    override suspend fun wakeAiServer(): Boolean = leafDetector.wake()
+    private suspend fun requireAiAccess() {
+        val days = accountApi?.aiLoginDays() ?: 0
+        _loginDays.value = days
+        check(days >= 7) { "Log in for 7 days to unlock" }
+    }
+
+    override suspend fun wakeAiServer(): Boolean {
+        if (_loginDays.value < 7) return false
+        requireAiAccess()
+        return leafDetector.wake()
+    }
 
     /**
      * Adds a care log note entry to the plant journal.
@@ -613,6 +773,7 @@ class AgriQuestRepositoryImpl(
         val updatedList = listOf(entry) + current.journalEntries
         _plantAvatar.value = current.copy(journalEntries = updatedList)
         dataStore?.saveJournalEntries(updatedList)
+        dataStore?.markForSync()
     }
 
     /**
@@ -645,6 +806,7 @@ class AgriQuestRepositoryImpl(
         }
         val todayString = getTodayDateString()
         dataStore?.saveQuizCompletedDate(todayString)
+        dataStore?.markForSync()
         return isCorrect
     }
 

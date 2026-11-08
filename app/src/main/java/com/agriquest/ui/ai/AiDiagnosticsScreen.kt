@@ -67,6 +67,16 @@ fun AiDiagnosticsScreenContent(
     onAddJournalEntry: (String) -> Unit = {},
     initialResult: AiScanResult? = null
 ) {
+    if (!uiState.isAiUnlocked) {
+        AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
+            PixelPageHeader("AI Agro-Assistant", "Diagnostics", uiState)
+            AppCard {
+                AppText("Log in for 7 days to unlock")
+                AppText("${uiState.loginDays.coerceIn(0, 7)}/7 days")
+            }
+        }
+        return
+    }
     val context = LocalContext.current
     var result by remember { mutableStateOf(initialResult) }
     var saved by remember { mutableStateOf(false) }

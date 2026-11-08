@@ -46,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,16 +98,20 @@ fun Esp32HardwareSetupDialog(
     onDismissRequest: () -> Unit,
     connectionState: ConnectionState = ConnectionState(),
     onStartScan: () -> Unit = {},
-    onConnectDevice: (DiscoveredBleDevice) -> Unit = {}
+    onConnectDevice: (DiscoveredBleDevice) -> Unit = {},
+    discoveredDevices: List<DiscoveredBleDevice>? = null
 ) {
-    val mockDevices = remember {
+    val mockDevices = discoveredDevices ?: remember {
         listOf(
             DiscoveredBleDevice("ESP32-AgriQuest-01", "24:62:AB:F1:82:10", rssi = -58),
             DiscoveredBleDevice("ESP32-Sensor-Node", "30:AE:A4:C2:19:88", rssi = -68)
         )
     }
 
-    var selectedDevice by remember { mutableStateOf(mockDevices.first()) }
+    var selectedDevice by remember { mutableStateOf(mockDevices.firstOrNull()) }
+    LaunchedEffect(mockDevices) {
+        if (selectedDevice !in mockDevices) selectedDevice = mockDevices.firstOrNull()
+    }
     val isScanning = connectionState.status == ConnectionStatus.SCANNING
     val isConnected = connectionState.status == ConnectionStatus.CONNECTED
 
@@ -373,12 +378,13 @@ fun Esp32HardwareSetupDialog(
 
                     Button(
                         onClick = {
-                            onConnectDevice(selectedDevice)
+                            selectedDevice?.let(onConnectDevice)
                         },
                         modifier = Modifier
                             .weight(1.5f)
                             .height(42.dp),
                         shape = RoundedCornerShape(12.dp),
+                        enabled = selectedDevice != null && !isScanning && connectionState.status != ConnectionStatus.CONNECTING,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Emerald600,
                             contentColor = PureWhite

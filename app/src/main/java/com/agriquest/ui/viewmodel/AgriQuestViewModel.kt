@@ -36,6 +36,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import com.agriquest.ui.components.DiscoveredBleDevice
 import kotlinx.coroutines.launch
 import java.io.IOException
 import java.net.ConnectException
@@ -49,13 +51,30 @@ import java.net.UnknownHostException
 class AgriQuestViewModel(
     private val repository: AgriQuestRepository = AgriQuestRepositoryImpl()
 ) : ViewModel() {
+    val discoveredDevices: StateFlow<List<DiscoveredBleDevice>> =
+        ((repository as? AgriQuestRepositoryImpl)?.discoveredDevices ?: MutableStateFlow(emptyList()))
+            .map { devices -> devices.map { DiscoveredBleDevice(it.deviceName, it.macAddress, it.serviceUuid, it.rssi) } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private var pairingJob: Job? = null
+    fun connectEsp32Device(macAddress: String, onPaired: () -> Unit = {}) {
+        if (pairingJob?.isActive == true) return
+        pairingJob = viewModelScope.launch {
+            try {
+                val accountRepository = repository as? AgriQuestRepositoryImpl
+                    ?: throw IllegalStateException("Secure device pairing is unavailable.")
+                accountRepository.pairEsp32Device(macAddress)
+                _notificationEvents.emit("ESP32 ownership verified and paired to your plant.")
+                onPaired()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { _notificationEvents.emit(e.message ?: "Secure pairing failed. Try physical pairing mode again.") }
+        }
+    }
 
     @Suppress("UNCHECKED_CAST")
     class Factory(
         private val repository: AgriQuestRepository
     ) : ViewModelProvider.Factory {
-
-        constructor(context: Context) : this(AgriQuestRepositoryImpl.getInstance(context.applicationContext))
 
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(AgriQuestViewModel::class.java)) {
@@ -88,7 +107,8 @@ class AgriQuestViewModel(
         repository.currentQuizQuestion,
         repository.isQuizCompletedToday,
         repository.selectedQuizOptionIndex,
-        repository.isQuizAnswerCorrect
+        repository.isQuizAnswerCorrect,
+        (repository as? AgriQuestRepositoryImpl)?.loginDays ?: MutableStateFlow(0)
     ) { flows: Array<Any?> ->
         AgriQuestUiState(
             telemetry = flows[0] as TelemetryData,
@@ -103,7 +123,8 @@ class AgriQuestViewModel(
             currentQuizQuestion = flows[9] as AgroQuizQuestion,
             isQuizCompletedToday = flows[10] as Boolean,
             selectedQuizOptionIndex = flows[11] as Int,
-            isQuizAnswerCorrect = flows[12] as Boolean?
+            isQuizAnswerCorrect = flows[12] as Boolean?,
+            loginDays = flows[13] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -246,9 +267,12 @@ class AgriQuestViewModel(
     fun wakeAiServer() {
         if (_leafScanState.value.serverAwake || wakeJob?.isActive == true) return
         wakeJob = viewModelScope.launch {
-            if (repository.wakeAiServer()) {
-                _leafScanState.update { it.copy(serverAwake = true) }
-            }
+            try {
+                if (repository.wakeAiServer()) {
+                    _leafScanState.update { it.copy(serverAwake = true) }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { /* Wake is optional; scanning reports connection failures. */ }
         }
     }
 

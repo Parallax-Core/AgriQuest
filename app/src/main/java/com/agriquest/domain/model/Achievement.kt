@@ -50,8 +50,8 @@ data class Achievement(
                 title = "First Plant",
                 description = "Started your first tomato growing journey.",
                 xpReward = 100,
-                isUnlocked = true,
-                earnedDate = "Jul 29",
+                isUnlocked = false,
+                earnedDate = null,
                 iconType = AchievementIcon.PLANT
             ),
             Achievement(
@@ -59,8 +59,8 @@ data class Achievement(
                 title = "Water Hero",
                 description = "Watered your plant 10 times without missing a day.",
                 xpReward = 150,
-                isUnlocked = true,
-                earnedDate = "Aug 12",
+                isUnlocked = false,
+                earnedDate = null,
                 iconType = AchievementIcon.WATER
             ),
             Achievement(
@@ -68,8 +68,8 @@ data class Achievement(
                 title = "Sun Seeker",
                 description = "Maintained optimal light for 5 consecutive days.",
                 xpReward = 125,
-                isUnlocked = true,
-                earnedDate = "Aug 20",
+                isUnlocked = false,
+                earnedDate = null,
                 iconType = AchievementIcon.SUN
             ),
             Achievement(

@@ -1,0 +1,14 @@
+[functions.auth-email]
+verify_jwt = false
+
+# Public login endpoint authenticates the supplied password through Supabase Auth.
+[functions.username-login]
+verify_jwt = false
+
+[auth.email.template.confirmation]
+subject = "Verify your AgriQuest account"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your AgriQuest password"
+content_path = "./supabase/templates/recovery.html"

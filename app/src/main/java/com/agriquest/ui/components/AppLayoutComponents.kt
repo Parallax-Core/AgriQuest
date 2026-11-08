@@ -54,8 +54,8 @@ fun AppScreen(
             AgriQuestBottomNav(
                 selectedTab = selectedTab,
                 onTabSelected = onTabSelected,
-                streakDays = uiState.plant.streakDays,
-                targetStreakDays = uiState.plant.targetStreakDays
+                streakDays = uiState.loginDays,
+                targetStreakDays = 7
             )
         }
     ) { insets ->

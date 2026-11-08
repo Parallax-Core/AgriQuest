@@ -15,3 +15,16 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Local secrets, signing material, and packaged build outputs.
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.apk
+*.aab
+
+# Supabase CLI machine-specific files.
+/supabase/.temp/
+/supabase/.branches/

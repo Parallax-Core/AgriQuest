@@ -39,8 +39,8 @@ data class PlantAvatar(
     val healthPercent: Int = 92,
     val healthSubtext: String = "Observe your plant to assess its condition",
     val stageTag: String = "Stage ${growthStage.stageLevel + 1} - ${growthStage.stageTitle}",
-    val journalEntries: List<JournalEntry> = DEFAULT_JOURNAL_ENTRIES,
-    val moistureHistory: List<MoistureHistoryEntry> = DEFAULT_MOISTURE_HISTORY,
+    val journalEntries: List<JournalEntry> = emptyList(),
+    val moistureHistory: List<MoistureHistoryEntry> = emptyList(),
     val nextWateringInHours: Int? = null
 ) {
     companion object {

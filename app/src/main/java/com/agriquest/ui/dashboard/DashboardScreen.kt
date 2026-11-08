@@ -2,6 +2,12 @@ package com.agriquest.ui.dashboard
 
 import android.net.Uri
 import android.widget.Toast
+import android.Manifest
+import android.os.Build
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -50,11 +56,22 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
+    val discoveredDevices by viewModel.discoveredDevices.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
     var showEsp32SetupDialog by remember { mutableStateOf(false) }
+    val bluetoothPermissions = if (Build.VERSION.SDK_INT >= 31) arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        else arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.all { it }) viewModel.startEsp32BleScan()
+        else viewModel.showNotification("Bluetooth permission is required to pair your ESP32.")
+    }
+    val startScan = {
+        if (bluetoothPermissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) viewModel.startEsp32BleScan()
+        else permissionLauncher.launch(bluetoothPermissions)
+    }
 
     LaunchedEffect(viewModel) {
         while (true) {
@@ -75,15 +92,11 @@ fun DashboardScreen(
         Esp32HardwareSetupDialog(
             onDismissRequest = { showEsp32SetupDialog = false },
             connectionState = uiState.connection,
-            onStartScan = { viewModel.startEsp32BleScan() },
+            onStartScan = startScan,
             onConnectDevice = { device ->
-                viewModel.setConnectionStatus(
-                    ConnectionStatus.CONNECTED,
-                    device.deviceName
-                )
-                viewModel.showNotification("📡 Connected to BLE device: ${device.deviceName}")
-                showEsp32SetupDialog = false
-            }
+                viewModel.connectEsp32Device(device.macAddress) { showEsp32SetupDialog = false }
+            },
+            discoveredDevices = discoveredDevices
         )
     }
 
@@ -101,7 +114,7 @@ fun DashboardScreen(
         onClaimQuest = { questId -> viewModel.claimQuest(questId) },
         onScanForEsp32 = {
             showEsp32SetupDialog = true
-            viewModel.startEsp32BleScan()
+            startScan()
         },
         leafScanState = leafScanState,
         onScanPhoto = { photo -> viewModel.performCameraScan(photo) },

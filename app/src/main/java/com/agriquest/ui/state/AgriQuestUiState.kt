@@ -32,8 +32,11 @@ data class AgriQuestUiState(
     val selectedQuizOptionIndex: Int = -1,
     val isQuizAnswerCorrect: Boolean? = null,
     val diagnosticResult: String? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val loginDays: Int = 0
 ) {
+    val isAiUnlocked: Boolean get() = loginDays >= 7
+
     /** Number of unlocked achievements. */
     val unlockedAchievementsCount: Int
         get() = achievements.count { it.isUnlocked }

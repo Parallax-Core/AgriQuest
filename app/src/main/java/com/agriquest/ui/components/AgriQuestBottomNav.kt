@@ -164,11 +164,16 @@ private fun NavigationTabImage(
             colorFilter = if (isSelected) ColorFilter.tint(selectedImageColor) else null
         )
     } else {
-        Icon(
-            imageVector = tab.icon,
-            contentDescription = tab.title,
-            modifier = Modifier.size(22.dp)
-        )
+        Box(
+            modifier = Modifier.size(width = 32.dp, height = 38.4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = tab.icon,
+                contentDescription = tab.title,
+                modifier = Modifier.size(32.dp)
+            )
+        }
     }
 }
 
