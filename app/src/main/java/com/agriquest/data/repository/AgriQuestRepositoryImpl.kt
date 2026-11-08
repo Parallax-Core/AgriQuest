@@ -6,8 +6,6 @@ import com.agriquest.data.ble.Esp32BleManager
 import com.agriquest.data.local.AgriQuestDataStore
 import com.agriquest.data.remote.LeafDetectorApi
 import com.agriquest.data.remote.LeafPhotoPreparer
-import com.agriquest.data.remote.SupabaseClient
-import com.agriquest.data.remote.SupabaseCloud
 import com.agriquest.data.simulation.TelemetrySimulationEngine
 import com.agriquest.domain.model.Achievement
 import com.agriquest.domain.model.ActuatorState
@@ -22,9 +20,7 @@ import com.agriquest.domain.model.PlantGrowthStage
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
-import com.agriquest.domain.model.WateringStatus
 import com.agriquest.domain.repository.AgriQuestRepository
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CompletableDeferred
@@ -32,15 +28,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -58,7 +49,6 @@ class AgriQuestRepositoryImpl(
     val esp32BleManager: Esp32BleManager = Esp32BleManager(),
     private val appContext: Context? = null,
     private val leafDetector: LeafDetectorApi = LeafDetectorApi(),
-    private val supabase: SupabaseClient? = null,
 ) : AgriQuestRepository {
 
     companion object {
@@ -69,28 +59,11 @@ class AgriQuestRepositoryImpl(
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: AgriQuestRepositoryImpl(
                     dataStore = AgriQuestDataStore(context.applicationContext),
-                    appContext = context.applicationContext,
-                    supabase = SupabaseClient.getInstance(context.applicationContext)
+                    appContext = context.applicationContext
                 ).also { INSTANCE = it }
             }
         }
-
-        /** How often Live IoT mode asks Supabase for the newest reading (the ESP32 polls commands at the same rate). */
-        private const val LIVE_POLL_MS = 5_000L
-
-        /** A reading older than this means the sensor has stopped sending. */
-        private const val LIVE_STALE_SEC = 120L
     }
-
-    private val supabaseCloud: SupabaseCloud? = supabase?.let { SupabaseCloud(it) }
-
-    /** The logged-in player's plant in Supabase; null until loaded or when logged out. */
-    @Volatile
-    private var cloudPlantId: String? = null
-    private var liveReadingsJob: Job? = null
-
-    private val _accountEmail = MutableStateFlow(supabase?.session?.value?.email)
-    override val accountEmail: StateFlow<String?> = _accountEmail.asStateFlow()
 
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -182,17 +155,6 @@ class AgriQuestRepositoryImpl(
     override val isQuizAnswerCorrect: StateFlow<Boolean?> = _isQuizAnswerCorrect.asStateFlow()
 
     init {
-        // Follow log-in / log-out: load the player's plant from Supabase for each new account.
-        supabase?.let { client ->
-            scope.launch {
-                client.session.map { it?.userId }.distinctUntilChanged().collect { userId ->
-                    _accountEmail.value = client.session.value?.email
-                    cloudPlantId = null
-                    if (userId != null) loadCloudPlant()
-                }
-            }
-        }
-
         // Restore the daily reward lock after loading persistence.
         resetQuizState()
 
@@ -233,7 +195,7 @@ class AgriQuestRepositoryImpl(
                     if (source == PlantSource.EMULATED_OFFLINE) {
                         startSimulationRoutine()
                     } else {
-                        startLiveReadings()
+                        bindBleHardwareState()
                     }
                 }
                 initialized.complete(Unit)
@@ -246,7 +208,7 @@ class AgriQuestRepositoryImpl(
 
     private fun startSimulationRoutine() {
         stopSimulationRoutine()
-        stopLiveReadings()
+        stopBleHardwareBinding()
 
         _connectionState.value = ConnectionState(
             deviceName = "ESP32",
@@ -268,96 +230,32 @@ class AgriQuestRepositoryImpl(
         simulationJob = null
     }
 
-    /**
-     * "ESP32 Hardware (Live IoT)" mode. In the paper's design the ESP32 sends its readings to Supabase
-     * over Wi-Fi (Figure 3.10), so the app asks Supabase for the newest reading every 5 seconds.
-     * Bluetooth (Esp32BleManager) is kept for pairing the ESP32 later.
-     */
-    private fun startLiveReadings() {
+    private fun bindBleHardwareState() {
         stopSimulationRoutine()
-        stopLiveReadings()
-        _connectionState.value = ConnectionState("ESP32", ConnectionStatus.CONNECTING, "Checking for readings…")
-        liveReadingsJob = scope.launch {
-            while (isActive) {
-                pollLatestReading()
-                delay(LIVE_POLL_MS)
+        stopBleHardwareBinding()
+
+        bleStateJob = scope.launch {
+            esp32BleManager.connectionState.collect { newState ->
+                _connectionState.value = newState
             }
         }
+
+        bleTelemetryJob = scope.launch {
+            esp32BleManager.telemetryDataFlow.collect { newTelemetry ->
+                _telemetryData.value = newTelemetry
+                dataStore?.saveTelemetryData(newTelemetry)
+                updateQuestProgressForTelemetry(newTelemetry)
+            }
+        }
+
+        startEsp32BleScan()
     }
 
-    private fun stopLiveReadings() {
-        liveReadingsJob?.cancel()
-        liveReadingsJob = null
+    private fun stopBleHardwareBinding() {
         bleStateJob?.cancel()
         bleStateJob = null
         bleTelemetryJob?.cancel()
         bleTelemetryJob = null
-    }
-
-    /** Loads the player's plant from Supabase and shows its name. Returns its id, or null if unreachable. */
-    private suspend fun loadCloudPlant(): String? {
-        val cloud = supabaseCloud ?: return null
-        return try {
-            val plant = cloud.myPlant() ?: return null
-            cloudPlantId = plant.id
-            _plantAvatar.value = _plantAvatar.value.copy(name = plant.name)
-            plant.id
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private suspend fun pollLatestReading() {
-        val cloud = supabaseCloud
-        if (cloud == null || supabase?.session?.value == null) {
-            _connectionState.value = ConnectionState("ESP32", ConnectionStatus.DISCONNECTED, "Log in to see live readings")
-            return
-        }
-        val plantId = cloudPlantId ?: loadCloudPlant()
-        if (plantId == null) {
-            _connectionState.value = ConnectionState("ESP32", ConnectionStatus.DISCONNECTED, "Can't reach the database")
-            return
-        }
-        val reading = try {
-            cloud.latestReading(plantId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            _connectionState.value = ConnectionState("ESP32", ConnectionStatus.DISCONNECTED, "Can't reach the database")
-            return
-        }
-        if (reading == null) {
-            _connectionState.value = ConnectionState("ESP32", ConnectionStatus.AWAITING_DEVICE, "Waiting for the first reading")
-            return
-        }
-
-        // A sensor that isn't fitted yet sends null; keep the last known value for it.
-        val current = _telemetryData.value
-        val updated = current.copy(
-            soilMoisture = reading.soilMoisture ?: current.soilMoisture,
-            airTemperature = reading.airTemp ?: current.airTemperature,
-            relativeHumidity = reading.humidity ?: current.relativeHumidity,
-            lightIntensity = reading.lightLux ?: current.lightIntensity
-        )
-        if (updated != current) {
-            _telemetryData.value = updated
-            dataStore?.saveTelemetryData(updated)
-            updateQuestProgressForTelemetry(updated)
-        }
-
-        val ageSec = ((System.currentTimeMillis() - reading.recordedAtMillis) / 1000).coerceAtLeast(0)
-        _connectionState.value = if (ageSec <= LIVE_STALE_SEC) {
-            ConnectionState("ESP32", ConnectionStatus.CONNECTED, "Live · updated ${ageSec}s ago")
-        } else {
-            val ago = if (ageSec < 3600) "${ageSec / 60} min" else "${ageSec / 3600} h"
-            ConnectionState("ESP32", ConnectionStatus.AWAITING_DEVICE, "Last reading $ago ago")
-        }
-    }
-
-    override suspend fun logout() {
-        supabase?.signOut()
     }
 
     override fun startEsp32BleScan() {
@@ -557,7 +455,7 @@ class AgriQuestRepositoryImpl(
             esp32BleManager.disconnect()
             startSimulationRoutine()
         } else {
-            startLiveReadings()
+            bindBleHardwareState()
         }
     }
 
@@ -644,81 +542,6 @@ class AgriQuestRepositoryImpl(
 
         // Notify completion
         onNotification("✅ Water pump cycle completed! Soil moisture is now ${updatedMoisture.toInt()}%.")
-    }
-
-    override fun waterPlant(seconds: Int): Flow<WateringStatus> = flow {
-        if (_plantSource.value != PlantSource.ESP32_HARDWARE) {
-            emit(WateringStatus(WateringStatus.Phase.RUNNING, "Watering for $seconds s (simulated pump)…"))
-            triggerPump(seconds) { }
-            emit(WateringStatus(WateringStatus.Phase.DONE, "Watered! (simulated pump)"))
-            return@flow
-        }
-
-        val cloud = supabaseCloud
-        if (cloud == null || supabase?.session?.value == null) {
-            emit(WateringStatus(WateringStatus.Phase.FAILED, "Log in to water your plant."))
-            return@flow
-        }
-        emit(WateringStatus(WateringStatus.Phase.SENDING, "Sending the command…"))
-        val offline = WateringStatus(WateringStatus.Phase.FAILED, "Can't reach the database. Check your internet.")
-        val plantId = cloudPlantId ?: loadCloudPlant()
-        if (plantId == null) {
-            emit(offline)
-            return@flow
-        }
-        val command = networkOrNull { cloud.requestCommand(plantId, "pump", seconds) }
-        if (command == null) {
-            emit(offline)
-            return@flow
-        }
-        if (command.status == "rejected") {
-            emit(WateringStatus(WateringStatus.Phase.FAILED, command.reason ?: "The command was rejected."))
-            return@flow
-        }
-        emit(WateringStatus(WateringStatus.Phase.WAITING, "Waiting for the sensor to start the pump…"))
-
-        // The ESP32 checks for commands every 5 s, then runs the pump for [seconds].
-        var lastStatus = command.status
-        val deadline = System.currentTimeMillis() + 90_000L
-        while (System.currentTimeMillis() < deadline) {
-            delay(2_000L)
-            val current = networkOrNull { cloud.command(command.id) } ?: continue
-            if (current.status == lastStatus) continue
-            lastStatus = current.status
-            when (current.status) {
-                "running" -> emit(WateringStatus(WateringStatus.Phase.RUNNING, "Pump running for $seconds s…"))
-                "done" -> {
-                    markWateredForQuests()
-                    emit(WateringStatus(WateringStatus.Phase.DONE, "Watered! Moisture will rise in the next readings."))
-                    return@flow
-                }
-                "failed", "expired" -> {
-                    emit(WateringStatus(WateringStatus.Phase.FAILED, current.reason ?: "The sensor didn't respond. Is it online?"))
-                    return@flow
-                }
-            }
-        }
-        emit(WateringStatus(WateringStatus.Phase.FAILED, "No answer from the sensor. Is it online?"))
-    }
-
-    /** Runs a Supabase call; returns null instead of throwing when the network or server fails. */
-    private suspend fun <T> networkOrNull(call: suspend () -> T): T? = try {
-        call()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        null
-    }
-
-    /** Real watering counts for the "First Water" quest, like the simulated pump does. */
-    private fun markWateredForQuests() {
-        val questList = _quests.value.toMutableList()
-        val index = questList.indexOfFirst { it.id == "quest_first_water" }
-        if (index != -1 && !questList[index].isClaimed) {
-            questList[index] = questList[index].copy(progress = 1.0f, isClaimable = true)
-            _quests.value = questList
-            updateActiveQuest(questList)
-        }
     }
 
     override fun toggleFanMode() {

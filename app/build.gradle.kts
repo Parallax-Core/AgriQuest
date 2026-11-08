@@ -15,12 +15,6 @@ val localProperties = Properties().apply {
 val aiServerUrl: String = localProperties.getProperty("agriquest.aiServerUrl", "https://agriquest-ai-server.onrender.com")
 val aiApiKey: String = localProperties.getProperty("agriquest.aiApiKey", "")
 
-// Supabase project. Set both in local.properties (not committed):
-//   agriquest.supabaseUrl=https://<project-id>.supabase.co
-//   agriquest.supabaseKey=sb_publishable_...   (the publishable / anon key, never the secret key)
-val supabaseUrl: String = localProperties.getProperty("agriquest.supabaseUrl", "")
-val supabaseKey: String = localProperties.getProperty("agriquest.supabaseKey", "")
-
 android {
     namespace = "com.agriquest"
     compileSdk {
@@ -36,8 +30,6 @@ android {
 
         buildConfigField("String", "AI_SERVER_URL", "\"$aiServerUrl\"")
         buildConfigField("String", "AI_API_KEY", "\"$aiApiKey\"")
-        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
-        buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
     }
 
     buildTypes {

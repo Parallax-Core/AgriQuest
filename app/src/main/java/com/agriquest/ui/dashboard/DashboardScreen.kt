@@ -1,11 +1,7 @@
 package com.agriquest.ui.dashboard
 
-import android.Manifest
 import android.net.Uri
-import android.os.Build
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -30,8 +26,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agriquest.domain.model.ConnectionStatus
 import com.agriquest.domain.model.JournalCategory
 import com.agriquest.domain.model.PlantSource
-import com.agriquest.domain.model.WateringStatus
-import com.agriquest.notifications.PlantAlertNotifier
 import com.agriquest.ui.ai.AiDiagnosticsScreenContent
 import com.agriquest.ui.awards.AwardsScreenContent
 import com.agriquest.ui.components.*
@@ -56,24 +50,7 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
-    val accountEmail by viewModel.accountEmail.collectAsStateWithLifecycle()
-    val wateringStatus by viewModel.wateringStatus.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    // Android 13+: ask once for permission to show the "plant needs water" notification.
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !PlantAlertNotifier.canNotify(context)) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    // Phone notification each time the soil becomes too dry (below 45%).
-    LaunchedEffect(viewModel) {
-        viewModel.dryAlerts.collect { percent ->
-            PlantAlertNotifier.showDrySoil(context, viewModel.uiState.value.plant.name, percent)
-        }
-    }
-
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -115,12 +92,12 @@ fun DashboardScreen(
         uiState = uiState,
         selectedTab = selectedTab,
         onTabSelected = { selectedTab = it },
-        // Live IoT readings now come from Supabase, so choosing it no longer opens the Bluetooth scan.
-        onPlantSourceSelected = { source -> viewModel.setPlantSource(source) },
-        accountEmail = accountEmail,
-        onLogout = { viewModel.logout() },
-        wateringStatus = wateringStatus,
-        onWaterPlant = { viewModel.waterPlant() },
+        onPlantSourceSelected = { source ->
+            viewModel.setPlantSource(source)
+            if (source == PlantSource.ESP32_HARDWARE) {
+                showEsp32SetupDialog = true
+            }
+        },
         onClaimQuest = { questId -> viewModel.claimQuest(questId) },
         onScanForEsp32 = {
             showEsp32SetupDialog = true
@@ -158,10 +135,6 @@ fun DashboardScreenContent(
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
     onScanForEsp32: () -> Unit = {},
-    accountEmail: String? = null,
-    onLogout: () -> Unit = {},
-    wateringStatus: WateringStatus? = null,
-    onWaterPlant: () -> Unit = {},
     leafScanState: LeafScanState = LeafScanState(),
     onScanPhoto: (Uri) -> Unit = {},
     onWakeAiServer: () -> Unit = {},
@@ -181,8 +154,6 @@ fun DashboardScreenContent(
             onTabSelected = onTabSelected,
             onAddJournalEntry = onAddJournalEntry,
             onSetSowingDate = onSetSowingDate,
-            wateringStatus = wateringStatus,
-            onWaterPlant = onWaterPlant,
             snackbarHostState = snackbarHostState
         )
         2 -> QuestsScreenContent(
@@ -223,8 +194,6 @@ fun DashboardScreenContent(
             onPlantSourceSelected = onPlantSourceSelected,
             onClaimQuest = onClaimQuest,
             onScanForEsp32 = onScanForEsp32,
-            accountEmail = accountEmail,
-            onLogout = onLogout,
             snackbarHostState = snackbarHostState
         )
     }
@@ -240,8 +209,6 @@ fun HomeDashboardContent(
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
     onScanForEsp32: () -> Unit = {},
-    accountEmail: String? = null,
-    onLogout: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     var showSourceSettings by remember { mutableStateOf(false) }
@@ -300,9 +267,6 @@ fun HomeDashboardContent(
                 }
                 if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
                     TextButton(onClick = { showSourceSettings = false; onScanForEsp32() }) { Text("Connect ESP32") }
-                HorizontalDivider()
-                Text("Signed in as ${accountEmail ?: "—"}", style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { showSourceSettings = false; onLogout() }) { Text("Log out") }
             }
         },
         confirmButton = { TextButton({ showSourceSettings = false }) { Text("Done") } }

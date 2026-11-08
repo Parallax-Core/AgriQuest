@@ -26,14 +26,7 @@ data class TelemetryData(
 
         const val MIN_OPTIMAL_LIGHT_LUX = 10000.0f
         const val MAX_OPTIMAL_LIGHT_LUX = 50000.0f
-
-        /** Below this soil moisture (%) the plant needs watering: the app alerts and enables Water Plant. */
-        const val WATERING_THRESHOLD = 45.0f
     }
-
-    /** True when the soil is too dry and the plant should be watered. */
-    val needsWatering: Boolean
-        get() = soilMoisture < WATERING_THRESHOLD
 
     /** Returns whether soil moisture is within optimal range (60-80%). */
     val isSoilMoistureOptimal: Boolean
