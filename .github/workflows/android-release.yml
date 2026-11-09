@@ -27,6 +27,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+      - name: Verify publishing secret
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node -e "if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('Add the SUPABASE_SERVICE_ROLE_KEY repository secret before publishing')"
       - name: Set up Android SDK
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
         with:
