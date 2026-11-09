@@ -27,6 +27,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        with:
+          packages: 'platform-tools platforms;android-37 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: 'false'
       - name: Prepare signing and version
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -53,10 +58,6 @@ jobs:
           appendFileSync(process.env.GITHUB_ENV,
             `ANDROID_KEYSTORE_PATH=${path}\nAGRIQUEST_VERSION_CODE=${code}\nAGRIQUEST_VERSION_NAME=1.0.${code}\n`);
           JS
-      - name: Install Android SDK components
-        run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
       - name: Build signed release and run lint
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
