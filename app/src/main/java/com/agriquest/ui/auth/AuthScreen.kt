@@ -113,20 +113,23 @@ fun AuthScreen(viewModel: AuthViewModel) {
                         } else {
                         AppText("Enter your email address to request a password reset code.")
                         AuthField(resetEmail, { resetEmail = it; error = null }, "Email Address", Icons.Rounded.Email, email = true, enabled = !auth.busy && !auth.recoverySent)
-                        PixelButton(
-                            text = if (auth.recoverySent) "Resend Code" else "Send Code",
-                            enabled = !auth.busy,
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            onClick = {
-                                if (!Patterns.EMAIL_ADDRESS.matcher(resetEmail.trim()).matches()) {
-                                    error = "Enter a valid email address."
-                                } else {
-                                    error = null
-                                    code = ""
-                                    viewModel.sendRecovery(resetEmail)
-                                }
+                        val sendRecoveryCode = {
+                            if (!Patterns.EMAIL_ADDRESS.matcher(resetEmail.trim()).matches()) {
+                                error = "Enter a valid email address."
+                            } else {
+                                error = null
+                                code = ""
+                                viewModel.sendRecovery(resetEmail)
                             }
-                        )
+                        }
+                        if (auth.recoverySent) {
+                            TextButton(enabled = !auth.busy, onClick = sendRecoveryCode) {
+                                AppText("Resend Code", color = AppAccentBackground)
+                            }
+                        } else {
+                            PixelButton("Send Code", enabled = !auth.busy,
+                                modifier = Modifier.heightIn(min = 48.dp), onClick = sendRecoveryCode)
+                        }
                         if (auth.recoverySent) {
                             AuthField(code, { code = it; error = null }, "Reset Code", Icons.Rounded.Key, enabled = !auth.busy)
                             PixelButton("Verify Code", enabled = !auth.busy, onClick = {
@@ -164,11 +167,10 @@ fun AuthScreen(viewModel: AuthViewModel) {
                             if (code.isBlank()) error = "Enter the code from your email."
                             else { error = null; viewModel.verifySignup(code); code = "" }
                         })
-                        PixelButton(
-                            text = "Resend Code",
+                        TextButton(
                             enabled = !auth.busy,
                             onClick = { error = null; code = ""; viewModel.resendSignup() }
-                        )
+                        ) { AppText("Resend Code", color = AppAccentBackground) }
                     } else {
                     AuthField(username, { username = it; error = null }, "Username", Icons.Rounded.Person, enabled = !auth.busy)
                     if (signUp) AuthField(email, { email = it; error = null }, "Email Address", Icons.Rounded.Email, email = true, enabled = !auth.busy)
