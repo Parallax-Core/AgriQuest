@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agriquest.ui.splash.SplashScreen
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
+import com.agriquest.ui.updates.AppUpdatePrompt
 
 class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AgriQuestTheme {
+                AppUpdatePrompt()
                 var isStarted by rememberSaveable { mutableStateOf(false) }
                 val authState by authViewModel.state.collectAsStateWithLifecycle()
                 val repository by authViewModel.accountRepository.collectAsStateWithLifecycle()

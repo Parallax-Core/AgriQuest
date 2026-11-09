@@ -12,11 +12,14 @@ val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) file.inputStream().use { load(it) }
 }
-val aiServerUrl: String = localProperties.getProperty("agriquest.aiServerUrl", "https://agriquest-ai-server.onrender.com")
-val aiApiKey: String = localProperties.getProperty("agriquest.aiApiKey", "")
+val aiServerUrl: String = providers.environmentVariable("AI_SERVER_URL").orNull
+    ?: localProperties.getProperty("agriquest.aiServerUrl", "https://agriquest-ai-server.onrender.com")
+val aiApiKey: String = providers.environmentVariable("AI_API_KEY").orNull ?: localProperties.getProperty("agriquest.aiApiKey", "")
 // Supabase public client configuration lives in untracked local.properties.
-val supabaseUrl: String = localProperties.getProperty("agriquest.supabaseUrl", "")
-val supabaseAnonKey: String = localProperties.getProperty("agriquest.supabaseAnonKey", "")
+val supabaseUrl: String = providers.environmentVariable("SUPABASE_URL").orNull ?: localProperties.getProperty("agriquest.supabaseUrl", "")
+val supabaseAnonKey: String = providers.environmentVariable("SUPABASE_ANON_KEY").orNull ?: localProperties.getProperty("agriquest.supabaseAnonKey", "")
+val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+fun quoted(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r") + "\""
 
 android {
     namespace = "com.agriquest"
@@ -28,17 +31,28 @@ android {
         applicationId = "com.agriquest"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = providers.environmentVariable("AGRIQUEST_VERSION_CODE").orNull?.toInt() ?: 1
+        versionName = providers.environmentVariable("AGRIQUEST_VERSION_NAME").orNull ?: "1.0"
 
-        buildConfigField("String", "AI_SERVER_URL", "\"$aiServerUrl\"")
-        buildConfigField("String", "AI_API_KEY", "\"$aiApiKey\"")
-        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        buildConfigField("String", "AI_SERVER_URL", quoted(aiServerUrl))
+        buildConfigField("String", "AI_API_KEY", quoted(aiApiKey))
+        buildConfigField("String", "SUPABASE_URL", quoted(supabaseUrl))
+        buildConfigField("String", "SUPABASE_ANON_KEY", quoted(supabaseAnonKey))
+    }
+
+    if (releaseKeystorePath != null) {
+        signingConfigs.create("release") {
+            storeFile = file(releaseKeystorePath)
+            storePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").get()
+            storeType = "JKS"
+        }
     }
 
     buildTypes {
         release {
+            if (releaseKeystorePath != null) signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = false
             }

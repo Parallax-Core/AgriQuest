@@ -24,6 +24,7 @@ local.properties
 *.keystore
 *.apk
 *.aab
+/.release-signing/
 
 # Supabase CLI machine-specific files.
 /supabase/.temp/
