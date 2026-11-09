@@ -112,7 +112,8 @@ fun AuthScreen(viewModel: AuthViewModel) {
                             })
                         } else {
                         AppText("Enter your email address to request a password reset code.")
-                        AuthField(resetEmail, { resetEmail = it; error = null }, "Email Address", Icons.Rounded.Email, email = true, enabled = !auth.busy && !auth.recoverySent)
+                        AuthField(resetEmail, { resetEmail = it; error = null }, "Email Address", Icons.Rounded.Email,
+                            email = true, readOnly = auth.busy || auth.recoverySent)
                         val sendRecoveryCode = {
                             if (!Patterns.EMAIL_ADDRESS.matcher(resetEmail.trim()).matches()) {
                                 error = "Enter a valid email address."
@@ -122,16 +123,15 @@ fun AuthScreen(viewModel: AuthViewModel) {
                                 viewModel.sendRecovery(resetEmail)
                             }
                         }
-                        if (auth.recoverySent) {
-                            TextButton(enabled = !auth.busy, onClick = sendRecoveryCode) {
-                                AppText("Resend Code", color = AppAccentBackground)
-                            }
-                        } else {
+                        if (!auth.recoverySent) {
                             PixelButton("Send Code", enabled = !auth.busy,
                                 modifier = Modifier.heightIn(min = 48.dp), onClick = sendRecoveryCode)
                         }
                         if (auth.recoverySent) {
                             AuthField(code, { code = it; error = null }, "Reset Code", Icons.Rounded.Key, enabled = !auth.busy)
+                            TextButton(enabled = !auth.busy, onClick = sendRecoveryCode) {
+                                AppText("Resend Code", color = AppAccentBackground)
+                            }
                             PixelButton("Verify Code", enabled = !auth.busy, onClick = {
                                 if (code.isBlank()) error = "Enter the code from your email."
                                 else { error = null; viewModel.verifyRecovery(code); code = "" }
@@ -233,11 +233,12 @@ private fun AuthField(
     icon: ImageVector,
     secret: Boolean = false,
     email: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    readOnly: Boolean = false
 ) {
     var visible by remember { mutableStateOf(false) }
     OutlinedTextField(
-        value = value, onValueChange = onValueChange, enabled = enabled,
+        value = value, onValueChange = onValueChange, enabled = enabled, readOnly = readOnly,
         modifier = Modifier.fillMaxWidth(), singleLine = true,
         label = { AppText(label) },
         textStyle = MaterialTheme.typography.bodySmall,
