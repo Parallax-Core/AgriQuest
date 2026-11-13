@@ -24,7 +24,8 @@ import com.agriquest.ui.theme.*
 @Composable
 fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestUiState = AgriQuestUiState(),
     selectedTab: Int = 1, onTabSelected: (Int) -> Unit = {},
-    onAddJournalEntry: (String) -> Unit = {}, onSetSowingDate: (String) -> Unit = {}, snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }) {
+    onAddJournalEntry: (String) -> Unit = {}, onSetSowingDate: (String) -> Unit = {}, snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    wateringStatus: WateringStatus? = null, onWaterPlant: () -> Unit = {}) {
     var editingDate by remember { mutableStateOf(false) }
     var sowingDate by remember(uiState.plant.sowingDate) { mutableStateOf(uiState.plant.sowingDate) }
     var journal by remember { mutableStateOf(false) }
@@ -64,6 +65,7 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
                     PixelChip(if (uiState.plantSource == PlantSource.ESP32_HARDWARE) "● ESP32: ${uiState.connection.statusText}" else "● Emulated")
                 })
                 TelemetryGrid(telemetry = uiState.telemetry, showTitle = false, embedded = true)
+                WateringControls(uiState.telemetry, wateringStatus, onWaterPlant)
             }
             MoistureHistorySection(uiState.moistureHistory)
             PixelPanel {
@@ -86,6 +88,23 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
             if (note.isNotBlank()) { onAddJournalEntry(note.trim()); note = ""; addingNote = false }
         }, enabled = note.isNotBlank()) { Text("Save Note") } },
         dismissButton = { TextButton({ addingNote = false }) { Text("Cancel") } })
+}
+
+/** Dry-soil banner and the Water Plant button (enabled only when the soil is below the watering threshold). */
+@Composable
+private fun WateringControls(telemetry: TelemetryData, status: WateringStatus?, onWaterPlant: () -> Unit) {
+    val warning = Color(0xFFAE5734)
+    val dry = telemetry.needsWatering
+    val busy = status?.isBusy == true
+    if (dry) Surface(color = Color(0xFFFBE3C4), shape = RoundedCornerShape(3.dp), border = BorderStroke(1.dp, warning)) {
+        Text("Soil is too dry (${telemetry.soilMoisture.toInt()}%). Water your plant.",
+            Modifier.fillMaxWidth().padding(8.dp), style = MaterialTheme.typography.labelMedium, color = warning)
+    }
+    PixelButton(if (busy) "Watering..." else "Water Plant", onWaterPlant, Modifier.fillMaxWidth(), enabled = dry && !busy)
+    val hint = status?.message
+        ?: if (!dry) "Water Plant unlocks when soil moisture drops below ${TelemetryData.WATERING_THRESHOLD.toInt()}%." else null
+    if (hint != null) Text(hint, style = MaterialTheme.typography.bodySmall,
+        color = if (status?.phase == WateringStatus.Phase.FAILED) warning else AppTextColor)
 }
 
 @Composable

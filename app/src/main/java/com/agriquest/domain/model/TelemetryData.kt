@@ -7,6 +7,9 @@ package com.agriquest.domain.model
  * @param airTemperature Air temperature in degrees Celsius (°C)
  * @param relativeHumidity Relative humidity percentage (0.0% to 100.0%)
  * @param lightIntensity Light intensity in Lux
+ *
+ * A value is Float.NaN when the device has no sensor for it (the current ESP32 only measures soil
+ * moisture); the UI shows "—" for those.
  */
 data class TelemetryData(
     val soilMoisture: Float = 68.0f,
@@ -26,6 +29,21 @@ data class TelemetryData(
 
         const val MIN_OPTIMAL_LIGHT_LUX = 10000.0f
         const val MAX_OPTIMAL_LIGHT_LUX = 50000.0f
+
+        /** Below this soil moisture (%) the app alerts the user and enables the Water Plant button. */
+        const val WATERING_THRESHOLD = 45.0f
+    }
+
+    /** True when the soil is dry enough to water (below [WATERING_THRESHOLD]). False if there is no reading. */
+    val needsWatering: Boolean
+        get() = soilMoisture.isFinite() && soilMoisture < WATERING_THRESHOLD
+
+    /** Same readings with any missing (NaN) value replaced by the default, e.g. before the simulator continues from them. */
+    fun withMissingFilled(): TelemetryData {
+        val defaults = TelemetryData()
+        fun Float.orDefault(default: Float) = if (isFinite()) this else default
+        return TelemetryData(soilMoisture.orDefault(defaults.soilMoisture), airTemperature.orDefault(defaults.airTemperature),
+            relativeHumidity.orDefault(defaults.relativeHumidity), lightIntensity.orDefault(defaults.lightIntensity))
     }
 
     /** Returns whether soil moisture is within optimal range (60-80%). */

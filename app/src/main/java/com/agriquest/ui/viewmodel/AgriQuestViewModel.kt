@@ -20,6 +20,10 @@ import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.WateringStatus
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import com.agriquest.domain.repository.AgriQuestRepository
 import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.state.LeafScanState
@@ -137,9 +141,62 @@ class AgriQuestViewModel(
     val leafScanState: StateFlow<LeafScanState> = _leafScanState.asStateFlow()
     private var wakeJob: Job? = null
 
+    /** Progress of the last Water Plant request (null = none yet). Shown under the soil-moisture reading. */
+    private val _wateringStatus = MutableStateFlow<WateringStatus?>(null)
+    val wateringStatus: StateFlow<WateringStatus?> = _wateringStatus.asStateFlow()
+    private var wateringJob: Job? = null
+
+    /** One alert each time the soil dries below the threshold (re-arms once moisture is back to 50%). */
+    data class DryAlert(val plantName: String, val moisturePercent: Int)
+    private val _dryAlerts = Channel<DryAlert>(Channel.CONFLATED)
+    val dryAlerts: Flow<DryAlert> = _dryAlerts.receiveAsFlow()
+
     init {
         repository.resetQuizState()
         checkAndResetMidnightQuests()
+        watchForDrySoil()
+    }
+
+    private fun watchForDrySoil() {
+        viewModelScope.launch {
+            var armed = true
+            repository.telemetryData.collect { telemetry ->
+                val moisture = telemetry.soilMoisture
+                if (!moisture.isFinite()) return@collect
+                if (armed && telemetry.needsWatering) {
+                    armed = false
+                    _dryAlerts.trySend(DryAlert(repository.plantAvatar.value.name, moisture.toInt()))
+                } else if (moisture >= DRY_ALERT_REARM_PERCENT) {
+                    armed = true
+                }
+            }
+        }
+    }
+
+    /** Water Plant button: only acts when the soil is actually dry and no request is in progress. */
+    fun waterPlant(durationSeconds: Int = 5) {
+        if (_wateringStatus.value?.isBusy == true) return
+        if (!uiState.value.telemetry.needsWatering) {
+            viewModelScope.launch { _notificationEvents.emit("The soil is moist enough; no watering needed yet.") }
+            return
+        }
+        wateringJob?.cancel()   // only the "hide the last result" wait can still be running here
+        _wateringStatus.value = WateringStatus(WateringStatus.Phase.SENDING, "Sending watering request...")  // blocks double taps
+        wateringJob = viewModelScope.launch {
+            try {
+                repository.waterPlant(durationSeconds).collect { status ->
+                    _wateringStatus.value = status
+                    if (status.phase == WateringStatus.Phase.DONE || status.phase == WateringStatus.Phase.FAILED) {
+                        _notificationEvents.emit(status.message)
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                _wateringStatus.value = WateringStatus(WateringStatus.Phase.FAILED, e.message ?: "Watering failed.")
+            }
+            delay(10_000)   // keep the result visible for a while, then hide it
+            if (_wateringStatus.value?.isBusy == false) _wateringStatus.value = null
+        }
     }
 
     /**
@@ -398,5 +455,8 @@ class AgriQuestViewModel(
     private companion object {
         /** After this long, the scanner explains that the server may be waking up. */
         const val SLOW_SCAN_NOTICE_MS = 6_000L
+
+        /** The dry-soil alert fires again only after moisture has recovered to this level. */
+        const val DRY_ALERT_REARM_PERCENT = 50f
     }
 }

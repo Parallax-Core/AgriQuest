@@ -67,7 +67,8 @@ class AgriQuestDataStore(
                 AiScanResult(it.getString("id"), it.getString("title"), it.getString("subtext"),
                     it.getString("confidence"), it.optBoolean("healthy", true),
                     it.optString("path").takeIf(String::isNotBlank), it.optBoolean("low"),
-                    it.optString("pathogen").takeIf(String::isNotBlank))
+                    it.optString("pathogen").takeIf(String::isNotBlank),
+                    it.optString("heatmap").takeIf(String::isNotBlank))
             } }
         }.getOrDefault(emptyList())
     }
@@ -76,7 +77,8 @@ class AgriQuestDataStore(
         val json = JSONArray()
         scans.forEach { json.put(JSONObject().put("id", it.id).put("title", it.title)
             .put("subtext", it.subtext).put("confidence", it.confidence).put("healthy", it.isHealthy)
-            .put("path", it.imagePath.orEmpty()).put("low", it.lowConfidence).put("pathogen", it.pathogen.orEmpty())) }
+            .put("path", it.imagePath.orEmpty()).put("low", it.lowConfidence).put("pathogen", it.pathogen.orEmpty())
+            .put("heatmap", it.heatmapPath.orEmpty())) }
         dataStore.edit { it[KEY_SCANS] = json.toString() }
     }
 

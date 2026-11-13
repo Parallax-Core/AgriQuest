@@ -19,24 +19,28 @@ import java.util.Locale
 private data class SensorReading(val label: String, val value: String, val icon: Int,
     val status: String, val good: Boolean, val color: Color)
 
+/** Whole-number value, or "—" when that sensor isn't fitted (NaN). */
+private fun Float.shown(unit: String) = if (isFinite()) "${toInt()}$unit" else "—"
+private fun Float.statusOr(text: String) = if (isFinite()) text else "No sensor"
+
 private fun TelemetryData.readings() = listOf(
-    SensorReading("Soil Moisture", "${soilMoisture.toInt()}%", R.drawable.soil_moisture,
+    SensorReading("Soil Moisture", soilMoisture.shown("%"), R.drawable.soil_moisture,
         if (soilMoisture < 60f) "Too Dry" else if (soilMoisture > 80f) "Too Wet" else "Optimal",
         soilMoisture in 60f..80f, Color(0xFFDCEBF0)),
-    SensorReading("Temperature", "${airTemperature.toInt()}°C", when {
+    SensorReading("Temperature", airTemperature.shown("°C"), when {
         airTemperature < 15f -> R.drawable.temp_cold
         airTemperature > 30f -> R.drawable.temp_high
         airTemperature >= 28f -> R.drawable.temp_warm
         else -> R.drawable.temp_good
     },
-        if (airTemperature < 15f) "Too Cold" else if (airTemperature > 30f) "Too Hot" else "Ideal",
-        airTemperature in 15f..30f, Color(0xFFFBE3C4)),
-    SensorReading("Humidity", "${relativeHumidity.toInt()}%", R.drawable.humidity,
-        if (relativeHumidity < 50f) "Too Low" else if (relativeHumidity > 70f) "Too High" else "Good",
-        relativeHumidity in 50f..70f, Color(0xFFDFECCB)),
-    SensorReading("Light", if (lightIntensity >= 1000f) String.format(Locale.US, "%.1f klux", lightIntensity / 1000f)
+        airTemperature.statusOr(if (airTemperature < 15f) "Too Cold" else if (airTemperature > 30f) "Too Hot" else "Ideal"),
+        !airTemperature.isFinite() || airTemperature in 15f..30f, Color(0xFFFBE3C4)),
+    SensorReading("Humidity", relativeHumidity.shown("%"), R.drawable.humidity,
+        relativeHumidity.statusOr(if (relativeHumidity < 50f) "Too Low" else if (relativeHumidity > 70f) "Too High" else "Good"),
+        !relativeHumidity.isFinite() || relativeHumidity in 50f..70f, Color(0xFFDFECCB)),
+    SensorReading("Light", if (!lightIntensity.isFinite()) "—" else if (lightIntensity >= 1000f) String.format(Locale.US, "%.1f klux", lightIntensity / 1000f)
         else "${lightIntensity.toInt()} lux", R.drawable.light,
-        if (lightIntensity < 4000f) "Too Low" else "Good", lightIntensity >= 4000f, Color(0xFFFBEFBD))
+        lightIntensity.statusOr(if (lightIntensity < 4000f) "Too Low" else "Good"), !lightIntensity.isFinite() || lightIntensity >= 4000f, Color(0xFFFBEFBD))
 )
 
 /** Shared metric presentation: four compact categories or two detailed columns. */

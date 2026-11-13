@@ -151,20 +151,30 @@ class SupabasePlantApi(
     suspend fun latestReading(binding: PlantMonitoringBinding): PlantSensorReading? {
         require(binding.accountId == session.userId)
         val data = rows("sensor_readings?plant_id=eq.${encode(binding.plantId)}&device_id=eq.${encode(binding.deviceId)}&select=soil_moisture,air_temp,humidity,light_lux,recorded_at&order=recorded_at.desc&limit=1").optJSONObject(0) ?: return null
-        if (listOf("soil_moisture", "air_temp", "humidity", "light_lux").any { data.isNull(it) }) return null
-        val telemetry = TelemetryData(data.getDouble("soil_moisture").toFloat(), data.getDouble("air_temp").toFloat(),
-            data.getDouble("humidity").toFloat(), data.getDouble("light_lux").toFloat())
-        if (!listOf(telemetry.soilMoisture, telemetry.airTemperature, telemetry.relativeHumidity, telemetry.lightIntensity).all(Float::isFinite)) return null
+        // Soil moisture is required; the other sensors aren't fitted yet, so they may be missing (NaN = "—").
+        if (data.isNull("soil_moisture")) return null
+        fun value(key: String) = if (data.isNull(key)) Float.NaN else data.getDouble(key).toFloat()
+        val telemetry = TelemetryData(value("soil_moisture"), value("air_temp"), value("humidity"), value("light_lux"))
+        if (!telemetry.soilMoisture.isFinite()) return null
         return PlantSensorReading(telemetry, data.getString("recorded_at"))
     }
 
     /** Sends through the existing safety-checked RPC; firmware later consumes get_pending_commands. */
-    suspend fun requestCommand(binding: PlantMonitoringBinding, actuator: String, seconds: Int) {
+    /** @return the new command's id, to follow it with [commandStatus]. */
+    suspend fun requestCommand(binding: PlantMonitoringBinding, actuator: String, seconds: Int): Long {
         require(binding.accountId == session.userId)
         val raw = request("rpc/request_command", "POST", JSONObject().put("p_plant_id", binding.plantId)
             .put("p_actuator", actuator).put("p_duration_s", seconds).toString())
         val command = if (raw.startsWith("[")) JSONArray(raw).getJSONObject(0) else JSONObject(raw)
         if (command.optString("status") != "pending") throw IOException(command.optString("reason", "Device command was rejected."))
+        return command.getLong("id")
+    }
+
+    /** Current status of a command (pending, running, done, failed, expired) and the reason, if any. */
+    suspend fun commandStatus(commandId: Long): Pair<String, String?> {
+        val row = rows("actuator_commands?id=eq.$commandId&select=status,reason").optJSONObject(0)
+            ?: throw IOException("The watering request could not be found.")
+        return row.getString("status") to row.nullableString("reason")
     }
 
     private suspend fun rows(path: String) = JSONArray(request(path))

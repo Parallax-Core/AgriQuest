@@ -29,3 +29,6 @@ local.properties
 # Supabase CLI machine-specific files.
 /supabase/.temp/
 /supabase/.branches/
+
+# ESP32 Wi-Fi password and device token.
+/firmware/agriquest_esp32/secrets.h

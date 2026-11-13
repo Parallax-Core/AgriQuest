@@ -150,8 +150,9 @@ internal object ScanExtrasClient {
                         accuracy = r.getDouble("accuracy"),
                         f1 = r.getDouble("f1"),
                         kappa = r.getDouble("kappa"),
-                        kappaLow = r.getDouble("kappaLow"),
-                        kappaHigh = r.getDouble("kappaHigh"),
+                        // The range is optional: NaN when the server has no confidence interval for this run.
+                        kappaLow = r.optDouble("kappaLow", Double.NaN),
+                        kappaHigh = r.optDouble("kappaHigh", Double.NaN),
                         wrong = r.getString("wrong"),
                         usedByApp = r.optBoolean("usedByApp", false),
                     )
@@ -236,7 +237,7 @@ fun ReliabilityPanel() {
                 Text(info.kappaMeaning, style = MaterialTheme.typography.bodySmall, color = AppTextColor)
                 Text(info.method, style = MaterialTheme.typography.labelSmall, color = AppTextColor)
                 TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "Hide details" else "Show all three tests", color = AppTextColor)
+                    Text(if (expanded) "Hide details" else "Compare all ${info.runs.size} models", color = AppTextColor)
                 }
                 if (expanded) {
                     HorizontalDivider(color = AppCardBorder)
@@ -257,7 +258,9 @@ fun ReliabilityPanel() {
                             Text(kappaText(run.kappa), Modifier.width(56.dp),
                                 style = MaterialTheme.typography.bodySmall, color = AppTextColor)
                         }
-                        Text("Tested on ${run.testedOn}. Wrong: ${run.wrong}. Kappa range ${kappaText(run.kappaLow)} to ${kappaText(run.kappaHigh)}.",
+                        val range = if (run.kappaLow.isNaN() || run.kappaHigh.isNaN()) ""
+                            else " Kappa range ${kappaText(run.kappaLow)} to ${kappaText(run.kappaHigh)}."
+                        Text("Tested on ${run.testedOn}. Wrong: ${run.wrong}.$range",
                             style = MaterialTheme.typography.labelSmall, color = AppTextColor)
                     }
                 }

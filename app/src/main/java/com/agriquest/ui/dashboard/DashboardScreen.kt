@@ -32,6 +32,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.agriquest.domain.model.ConnectionStatus
 import com.agriquest.domain.model.JournalCategory
 import com.agriquest.domain.model.PlantSource
+import com.agriquest.domain.model.WateringStatus
+import com.agriquest.notifications.PlantAlertNotifier
 import com.agriquest.ui.ai.AiDiagnosticsScreenContent
 import com.agriquest.ui.awards.AwardsScreenContent
 import com.agriquest.ui.components.*
@@ -57,6 +59,7 @@ fun DashboardScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
     val discoveredDevices by viewModel.discoveredDevices.collectAsStateWithLifecycle()
+    val wateringStatus by viewModel.wateringStatus.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -71,6 +74,19 @@ fun DashboardScreen(
     val startScan = {
         if (bluetoothPermissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED }) viewModel.startEsp32BleScan()
         else permissionLauncher.launch(bluetoothPermissions)
+    }
+
+    // Dry-soil alerts: ask once for notification permission (Android 13+), then post a phone notification.
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 && !PlantAlertNotifier.canNotify(context)) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.dryAlerts.collect { alert ->
+            PlantAlertNotifier.showDrySoil(context, alert.plantName, alert.moisturePercent)
+        }
     }
 
     LaunchedEffect(viewModel) {
@@ -127,6 +143,8 @@ fun DashboardScreen(
             coroutineScope.launch { viewModel.submitQuizAnswer(optionIndex) }
         },
         onNextQuizQuestion = { viewModel.nextQuizQuestion() },
+        wateringStatus = wateringStatus,
+        onWaterPlant = { viewModel.waterPlant() },
         snackbarHostState = snackbarHostState
     )
 }
@@ -157,6 +175,8 @@ fun DashboardScreenContent(
     onResetStreak: () -> Unit = {},
     onAnswerQuiz: (Int) -> Unit = {},
     onNextQuizQuestion: () -> Unit = {},
+    wateringStatus: WateringStatus? = null,
+    onWaterPlant: () -> Unit = {},
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
 ) {
     when (selectedTab) {
@@ -167,7 +187,9 @@ fun DashboardScreenContent(
             onTabSelected = onTabSelected,
             onAddJournalEntry = onAddJournalEntry,
             onSetSowingDate = onSetSowingDate,
-            snackbarHostState = snackbarHostState
+            snackbarHostState = snackbarHostState,
+            wateringStatus = wateringStatus,
+            onWaterPlant = onWaterPlant
         )
         2 -> QuestsScreenContent(
             modifier = modifier,

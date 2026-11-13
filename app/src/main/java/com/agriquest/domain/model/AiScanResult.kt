@@ -9,6 +9,7 @@ package com.agriquest.domain.model
  * @property imagePath the uploaded (shrunk) photo in the app's cache; null for previews.
  * @property lowConfidence true when the model is under 50% sure; the app suggests a clearer photo.
  * @property pathogen the organism behind the disease, from the server; null when healthy.
+ * @property heatmapPath PNG overlay showing where the model looked (Grad-CAM/CAM); null if none.
  */
 data class AiScanResult(
     val id: String,
@@ -18,7 +19,8 @@ data class AiScanResult(
     val isHealthy: Boolean = true,
     val imagePath: String? = null,
     val lowConfidence: Boolean = false,
-    val pathogen: String? = null
+    val pathogen: String? = null,
+    val heatmapPath: String? = null
 ) {
     companion object {
         /** Recent Scans starts empty; entries come from real scans only. */

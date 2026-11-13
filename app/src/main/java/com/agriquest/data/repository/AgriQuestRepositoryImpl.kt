@@ -23,6 +23,9 @@ import com.agriquest.domain.model.PlantGrowthStage
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.WateringStatus
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import com.agriquest.domain.repository.AgriQuestRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -321,7 +324,7 @@ class AgriQuestRepositoryImpl(
         )
 
         simulationJob = scope.launch {
-            simulationEngine.telemetryFlow(_telemetryData.value).collect { simulatedTelemetry ->
+            simulationEngine.telemetryFlow(_telemetryData.value.withMissingFilled()).collect { simulatedTelemetry ->
                 _telemetryData.value = simulatedTelemetry
                 dataStore?.saveTelemetryData(simulatedTelemetry)
                 updateQuestProgressForTelemetry(simulatedTelemetry)
@@ -688,6 +691,83 @@ class AgriQuestRepositoryImpl(
         onNotification("✅ Water pump cycle completed! Soil moisture is now ${updatedMoisture.toInt()}%.")
     }
 
+    override fun waterPlant(durationSeconds: Int): Flow<WateringStatus> = flow {
+        val api = accountApi
+        if (_plantSource.value != PlantSource.ESP32_HARDWARE || api == null) {
+            emit(WateringStatus(WateringStatus.Phase.RUNNING, "Watering for ${durationSeconds}s..."))
+            triggerPump(durationSeconds)
+            emit(WateringStatus(WateringStatus.Phase.DONE, "Plant watered."))
+            return@flow
+        }
+
+        emit(WateringStatus(WateringStatus.Phase.SENDING, "Sending watering request..."))
+        val activePlant = plantId
+        val binding = if (activePlant == null) null
+            else attempt { monitoringBinding ?: api.monitoringBinding(activePlant) }.getOrNull()
+        if (binding == null) {
+            emit(WateringStatus(WateringStatus.Phase.FAILED, "No ESP32 is paired with this plant yet."))
+            return@flow
+        }
+        // The database checks the safety rules (max run time, cooldown, one command at a time).
+        val sent = attempt { api.requestCommand(binding, "pump", durationSeconds) }
+        val commandId = sent.getOrNull()
+        if (commandId == null) {
+            emit(WateringStatus(WateringStatus.Phase.FAILED, friendlyError(sent.exceptionOrNull())))
+            return@flow
+        }
+
+        emit(WateringStatus(WateringStatus.Phase.WAITING, "Waiting for the ESP32 to pick it up..."))
+        val startedAt = System.currentTimeMillis()
+        var lastStatus = "pending"
+        while (true) {
+            delay(1_500)
+            val elapsed = System.currentTimeMillis() - startedAt
+            val (status, reason) = attempt { api.commandStatus(commandId) }.getOrNull() ?: ("unknown" to null)
+            when {
+                status == "done" -> {
+                    completeFirstWaterQuest()
+                    emit(WateringStatus(WateringStatus.Phase.DONE, "Plant watered. The new reading arrives in a few seconds."))
+                    return@flow
+                }
+                status == "failed" || status == "expired" || status == "rejected" -> {
+                    emit(WateringStatus(WateringStatus.Phase.FAILED, reason
+                        ?: if (status == "expired") "The ESP32 didn't pick up the request. Is it on and online?" else "The pump didn't run."))
+                    return@flow
+                }
+                status == "running" && lastStatus != "running" ->
+                    emit(WateringStatus(WateringStatus.Phase.RUNNING, "Pump running for ${durationSeconds}s..."))
+                // The ESP32 checks every 5 s, so 70 s without pickup means it is offline.
+                lastStatus != "running" && elapsed > 70_000 || elapsed > 150_000 -> {
+                    emit(WateringStatus(WateringStatus.Phase.FAILED, "No answer from the ESP32. Check that it is powered and online."))
+                    return@flow
+                }
+            }
+            if (status != "unknown") lastStatus = status
+        }
+    }
+
+    /** Runs a network call, returning its failure instead of throwing (but never swallowing cancellation). */
+    private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
+        try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
+
+    private fun friendlyError(error: Throwable?): String = when {
+        error is java.net.UnknownHostException || error is java.net.ConnectException ||
+            error is java.net.SocketTimeoutException -> "Can't reach the server. Check your internet connection."
+        error?.message.isNullOrBlank() || error?.message?.startsWith("Account sync failed") == true ->
+            "The server refused the watering request. Try again in a moment."
+        else -> error?.message ?: "The watering request failed."
+    }
+
+    /** A real watering also completes the "First Water" quest. */
+    private fun completeFirstWaterQuest() {
+        val questList = _quests.value.toMutableList()
+        val index = questList.indexOfFirst { it.id == "quest_first_water" }
+        if (index == -1 || questList[index].isClaimed) return
+        questList[index] = questList[index].copy(progress = 1.0f, isClaimable = true)
+        _quests.value = questList
+        updateActiveQuest(questList)
+    }
+
     override fun toggleFanMode() {
         if (_plantSource.value == PlantSource.ESP32_HARDWARE && accountApi != null) return
         val nextMode = _actuatorState.value.fanMode.next()
@@ -737,6 +817,13 @@ class AgriQuestRepositoryImpl(
         val savedPhoto = File(context.filesDir, "accounts/${accountId ?: "preview"}/leaf_photos/$id.jpg")
         val jpeg = withContext(Dispatchers.IO) { LeafPhotoPreparer.prepare(context, photo, savedPhoto) }
         val prediction = leafDetector.predict(jpeg)
+        val heatmapFile = prediction.heatmapPng?.let { png ->
+            runCatching {
+                File(savedPhoto.parentFile, "${id}_heatmap.png").also { file ->
+                    withContext(Dispatchers.IO) { file.writeBytes(png) }
+                }
+            }.getOrNull()
+        }
         val scannedAt = SimpleDateFormat("MMM d - h:mm a", Locale.getDefault()).format(Date())
         val newScan = AiScanResult(
             id = id,
@@ -746,7 +833,8 @@ class AgriQuestRepositoryImpl(
             isHealthy = prediction.isHealthy,
             imagePath = savedPhoto.absolutePath,
             lowConfidence = prediction.lowConfidence,
-            pathogen = prediction.pathogen
+            pathogen = prediction.pathogen,
+            heatmapPath = heatmapFile?.absolutePath
         )
         _recentScans.value = listOf(newScan) + _recentScans.value
         dataStore?.saveScans(_recentScans.value)

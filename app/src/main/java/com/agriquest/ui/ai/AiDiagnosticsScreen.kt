@@ -184,7 +184,7 @@ fun AiDiagnosticsScreenContent(
             }
         } else {
             val details = ScanPresentation.from(shown)
-            LeafScanPreview(details, shown.imagePath)
+            LeafScanPreview(details, shown.imagePath, shown.heatmapPath)
             PixelPanel {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(if (shown.isHealthy) Icons.Rounded.CheckCircle else Icons.Rounded.Warning, null,
@@ -261,17 +261,48 @@ private fun ScanHistoryRow(scan: AiScanResult, onClick: () -> Unit) {
     }
 }
 
-/** The user's photo when there is one; otherwise the camera frame with the diagnosis artwork. */
+/**
+ * The user's photo when there is one; otherwise the camera frame with the diagnosis artwork.
+ * When the server sent a heatmap, a switch lays it over the photo. The overlay has the photo's
+ * exact size, so drawing both with the same crop keeps them lined up.
+ */
 @Composable
-private fun LeafScanPreview(details: ScanPresentation, imagePath: String?) {
+private fun LeafScanPreview(details: ScanPresentation, imagePath: String?, heatmapPath: String?) {
     when (val photo = rememberScanPhoto(imagePath)) {
-        is ScanPhoto.Ready -> Image(photo.bitmap, contentDescription = "Scanned leaf: ${details.title}",
-            modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(PhotoShape)
-                .border(2.dp, AppCardBorder, PhotoShape),
-            contentScale = ContentScale.Crop)
+        is ScanPhoto.Ready -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val heatmap = rememberScanPhoto(heatmapPath)
+            var showHeatmap by rememberSaveable(heatmapPath) { mutableStateOf(true) }
+            Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(PhotoShape)
+                .border(2.dp, AppCardBorder, PhotoShape)) {
+                Image(photo.bitmap, contentDescription = "Scanned leaf: ${details.title}",
+                    modifier = Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+                if (showHeatmap && heatmap is ScanPhoto.Ready) {
+                    Image(heatmap.bitmap, contentDescription = "Heatmap of the areas the AI focused on",
+                        modifier = Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+                }
+            }
+            if (heatmap is ScanPhoto.Ready) HeatmapToggle(showHeatmap) { showHeatmap = it }
+        }
         ScanPhoto.Loading -> Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).clip(PhotoShape)
             .background(PixelTan).border(2.dp, AppCardBorder, PhotoShape))
         ScanPhoto.Missing -> ArtworkPreview(details)
+    }
+}
+
+/** Switch for the heatmap, with a one-line key to the colours. */
+@Composable
+private fun HeatmapToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Surface(Modifier.fillMaxWidth(), color = PixelTan, shape = RoundedCornerShape(3.dp),
+        border = BorderStroke(1.dp, AppCardBorder)) {
+        Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("AI Focus Heatmap", style = MaterialTheme.typography.labelLarge, color = AppTextColor)
+                Text("Red and yellow show where the AI looked most to decide.",
+                    style = MaterialTheme.typography.labelSmall, color = AppTextColor)
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
     }
 }
 

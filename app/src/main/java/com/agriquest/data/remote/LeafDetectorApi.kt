@@ -1,5 +1,6 @@
 package com.agriquest.data.remote
 
+import android.util.Base64
 import com.agriquest.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,6 +34,8 @@ class LeafDetectorApi(
         val confidenceText: String,
         val isHealthy: Boolean,
         val lowConfidence: Boolean,
+        /** PNG heatmap overlay (same size as the uploaded photo); null if the server sent none. */
+        val heatmapPng: ByteArray? = null,
     )
 
     /** The server answered with an error status (400 bad image, 401 wrong key, 413 too big, 5xx). */
@@ -114,6 +117,10 @@ class LeafDetectorApi(
             confidenceText = json.optString("confidenceText").ifBlank { "${Math.round(confidence * 100)}%" },
             isHealthy = json.getBoolean("isHealthy"),
             lowConfidence = json.optBoolean("lowConfidence", confidence < 0.5f),
+            heatmapPng = json.optString("heatmapPng").takeIf { it.isNotBlank() && it != "null" }?.let {
+                // A broken heatmap should never break the scan itself.
+                runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull()
+            },
         )
     }
 
