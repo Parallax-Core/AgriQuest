@@ -347,19 +347,47 @@ class AgriQuestRepositoryImpl(
 
         if (accountApi != null && plantId != null) {
             bleTelemetryJob = scope.launch {
+                // Connected = a NEW reading arrived within the last 45 s (measured on this phone's clock,
+                // so a wrong clock on the phone or ESP32 can't cause false disconnects).
+                var lastRecordedAt: String? = null
+                var lastSignalAt = 0L
+                var bindingCheckedAt = 0L
                 while (isActive) {
                     if (pairingInProgress) { delay(250); continue }
+                    val now = System.currentTimeMillis()
                     try {
-                        monitoringBinding = accountApi.monitoringBinding(plantId, monitoringBinding?.deviceId)
+                        if (monitoringBinding == null || now - bindingCheckedAt > 60_000L) {
+                            monitoringBinding = accountApi.monitoringBinding(plantId, monitoringBinding?.deviceId)
+                            bindingCheckedAt = now
+                        }
                         val binding = monitoringBinding
                         val reading = binding?.let { accountApi.latestReading(it) }
-                        if (reading != null) onNewTelemetry(reading.telemetry)
-                        _connectionState.value = ConnectionState(deviceName = binding?.deviceId ?: "ESP32",
-                            status = if (reading?.isFresh() == true) ConnectionStatus.CONNECTED else ConnectionStatus.AWAITING_DEVICE,
-                            statusText = if (reading != null) "Last reading: ${reading.recordedAt}" else "Awaiting paired ESP32 data")
+                        if (reading != null && reading.recordedAt != lastRecordedAt) {
+                            val firstLook = lastRecordedAt == null
+                            lastRecordedAt = reading.recordedAt
+                            // The first reading we see may be old; only count it as a signal if it is recent.
+                            if (!firstLook || reading.isFresh(now)) lastSignalAt = now
+                            onNewTelemetry(reading.telemetry)
+                        }
+                        val silentFor = now - lastSignalAt
+                        val name = binding?.deviceId ?: "ESP32"
+                        _connectionState.value = when {
+                            binding == null -> ConnectionState(name, ConnectionStatus.AWAITING_DEVICE, "No ESP32 paired with this plant")
+                            lastSignalAt != 0L && silentFor <= ConnectionState.HEARTBEAT_TIMEOUT_MS ->
+                                ConnectionState(name, ConnectionStatus.CONNECTED, "Connected")
+                            lastSignalAt == 0L && reading == null -> ConnectionState(name, ConnectionStatus.AWAITING_DEVICE, "Waiting for the first ESP32 signal")
+                            lastSignalAt == 0L -> ConnectionState(name, ConnectionStatus.AWAITING_DEVICE, "Waiting for a new ESP32 signal")
+                            else -> ConnectionState(name, ConnectionStatus.DISCONNECTED, "Disconnected (no signal for ${silentFor / 1000}s)")
+                        }
                     } catch (e: CancellationException) { throw e }
-                    catch (_: Exception) { _connectionState.value = ConnectionState(status = ConnectionStatus.DISCONNECTED, statusText = "ESP32 monitoring offline") }
-                    delay(10_000)
+                    catch (_: Exception) {
+                        // A short internet hiccup is not a disconnect; only report it after the same 45 s limit.
+                        if (now - lastSignalAt > ConnectionState.HEARTBEAT_TIMEOUT_MS) {
+                            _connectionState.value = ConnectionState(status = ConnectionStatus.DISCONNECTED,
+                                statusText = "Can't reach the server")
+                        }
+                    }
+                    delay(ConnectionState.POLL_INTERVAL_MS)
                 }
             }
             return

@@ -36,4 +36,13 @@ data class ConnectionState(
             ConnectionStatus.AWAITING_DEVICE -> 0xFF0288D1 // Blue
             ConnectionStatus.DISCONNECTED -> 0xFFF44336 // Red
         }
+
+    companion object {
+        /** The ESP32 firmware sends a reading (its heartbeat) at least this often. */
+        const val HEARTBEAT_INTERVAL_MS = 15_000L
+        /** No signal for longer than this (3 missed heartbeats) means the ESP32 is disconnected. */
+        const val HEARTBEAT_TIMEOUT_MS = 45_000L
+        /** How often the app checks for a new reading. */
+        const val POLL_INTERVAL_MS = 5_000L
+    }
 }

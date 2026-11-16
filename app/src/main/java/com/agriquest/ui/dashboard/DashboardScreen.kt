@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,6 +102,33 @@ fun DashboardScreen(
             // One message, one place: the snackbar (a Toast as well showed every message twice).
             snackbarHostState.showSnackbar(message)
         }
+    }
+
+    // "Connect" screen at the start of each game, before the plant info is shown.
+    var showConnectGate by rememberSaveable { mutableStateOf(true) }
+    val usingHardware = uiState.plantSource == PlantSource.ESP32_HARDWARE
+    val hardwareConnected = usingHardware && uiState.connection.status == ConnectionStatus.CONNECTED
+    LaunchedEffect(hardwareConnected) {
+        if (hardwareConnected && showConnectGate) {
+            kotlinx.coroutines.delay(1_500L)
+            showConnectGate = false
+        }
+    }
+    if (showConnectGate) {
+        ConnectGateDialog(
+            connection = uiState.connection,
+            usingHardware = usingHardware,
+            onConnectEsp32 = {
+                if (!usingHardware) viewModel.setPlantSource(PlantSource.ESP32_HARDWARE)
+                showEsp32SetupDialog = true
+                startScan()
+            },
+            onPlaySimulation = {
+                viewModel.setPlantSource(PlantSource.EMULATED_OFFLINE)
+                showConnectGate = false
+            },
+            onContinue = { showConnectGate = false }
+        )
     }
 
     if (showEsp32SetupDialog) {
