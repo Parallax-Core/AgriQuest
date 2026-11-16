@@ -200,3 +200,17 @@ private fun GrowingTomatoPlantPreview() {
         }
     }
 }
+
+/** Where the top of the drawn plant is, as a fraction of the drawing's height (0 = top edge). Used to place outfits. */
+fun tomatoTopFraction(dayCount: Int): Float {
+    val day = dayCount.coerceAtLeast(0)
+    val soilTop = 0.84f
+    return when (TomatoLook.forDay(day)) {
+        TomatoLook.SEED -> soilTop - 0.01f
+        TomatoLook.SPROUTING -> soilTop - (0.05f + 0.025f * (day - 6)) * 0.85f
+        else -> soilTop - (0.16f + 0.52f * ((day - 10).coerceAtLeast(0) / 50f).coerceIn(0f, 1f))
+    }
+}
+
+/** Height of the drawn stem as a fraction of the drawing's height. */
+fun tomatoStemFraction(dayCount: Int): Float = 0.84f - tomatoTopFraction(dayCount)

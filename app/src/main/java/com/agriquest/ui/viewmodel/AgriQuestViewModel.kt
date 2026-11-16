@@ -60,6 +60,21 @@ class AgriQuestViewModel(
             .map { devices -> devices.map { DiscoveredBleDevice(it.deviceName, it.macAddress, it.serviceUuid, it.rssi) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Outfits bought and worn (points = all XP earned minus points spent). */
+    val wardrobe: StateFlow<com.agriquest.domain.model.Wardrobe> =
+        (repository as? AgriQuestRepositoryImpl)?.wardrobe ?: MutableStateFlow(com.agriquest.domain.model.Wardrobe())
+
+    fun buyOutfit(outfitId: String) {
+        viewModelScope.launch {
+            val message = (repository as? AgriQuestRepositoryImpl)?.buyOutfit(outfitId) ?: "The outfit shop needs an account."
+            _notificationEvents.emit(message)
+        }
+    }
+
+    fun toggleOutfit(outfitId: String) {
+        viewModelScope.launch { (repository as? AgriQuestRepositoryImpl)?.toggleOutfit(outfitId) }
+    }
+
     /** Finished missions and quizzes, shown as a "Congratulations!" dialog. */
     val rewards: Flow<com.agriquest.domain.model.Reward> =
         (repository as? AgriQuestRepositoryImpl)?.rewards ?: kotlinx.coroutines.flow.emptyFlow()

@@ -68,6 +68,7 @@ fun DashboardScreen(
     val fanOn by viewModel.fanOn.collectAsStateWithLifecycle()
     val lightOn by viewModel.lightOn.collectAsStateWithLifecycle()
     val soundMuted by GameSounds.muted.collectAsStateWithLifecycle()
+    val wardrobe by viewModel.wardrobe.collectAsStateWithLifecycle()
     val watering = wateringStatus?.phase == WateringStatus.Phase.RUNNING || uiState.actuator.isPumpActive
     LaunchedEffect(watering) { if (watering) GameSounds.play(GameSound.WATER) }
     // Quiet garden ambience while the game is on screen.
@@ -226,7 +227,10 @@ fun DashboardScreen(
             onFan = { GameSounds.play(GameSound.FAN); viewModel.toggleFan() },
             onLight = { GameSounds.play(GameSound.LIGHT); viewModel.toggleLight() },
             soundMuted = soundMuted, onToggleSound = { GameSounds.setMuted(!soundMuted) },
-            onReplayTutorial = { tutorialStep = 0 })
+            onReplayTutorial = { tutorialStep = 0 },
+            wardrobe = wardrobe,
+            onBuyOutfit = { GameSounds.play(GameSound.SUCCESS); viewModel.buyOutfit(it) },
+            onToggleOutfit = { GameSounds.play(GameSound.TAP); viewModel.toggleOutfit(it) })
     )
     if (tutorialVisible) TutorialOverlay(
         step = tutorialStep,
@@ -246,7 +250,10 @@ data class ActuatorUi(
     val onLight: () -> Unit = {},
     val soundMuted: Boolean = false,
     val onToggleSound: () -> Unit = {},
-    val onReplayTutorial: () -> Unit = {}
+    val onReplayTutorial: () -> Unit = {},
+    val wardrobe: com.agriquest.domain.model.Wardrobe = com.agriquest.domain.model.Wardrobe(),
+    val onBuyOutfit: (String) -> Unit = {},
+    val onToggleOutfit: (String) -> Unit = {}
 )
 
 /**
@@ -320,7 +327,10 @@ fun DashboardScreenContent(
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
             onResetStreak = onResetStreak,
-            snackbarHostState = snackbarHostState
+            snackbarHostState = snackbarHostState,
+            wardrobe = actuators.wardrobe,
+            onBuyOutfit = actuators.onBuyOutfit,
+            onToggleOutfit = actuators.onToggleOutfit
         )
         else -> HomeDashboardContent(
             modifier = modifier,
@@ -372,7 +382,8 @@ fun HomeDashboardContent(
                 }
             }
             PlantScene(dayCount = uiState.plant.dayCount, watering = actuators.watering,
-                fanOn = actuators.fanOn, lightOn = actuators.lightOn, plantSize = 245.dp)
+                fanOn = actuators.fanOn, lightOn = actuators.lightOn, plantSize = 245.dp,
+                outfits = actuators.wardrobe.equippedOutfits)
         }
         ActuatorBar(watering = actuators.watering, fanOn = actuators.fanOn, lightOn = actuators.lightOn,
             canWater = uiState.telemetry.needsWatering, onWater = onWaterPlant, onFan = actuators.onFan,

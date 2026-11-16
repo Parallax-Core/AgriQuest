@@ -98,6 +98,9 @@ class AgriQuestRepositoryImpl(
     private val _syncStatus = MutableStateFlow(ProgressSyncStatus.SAVED)
     val syncStatus = _syncStatus.asStateFlow()
     private val _loginDays = MutableStateFlow(0)
+    private val _wardrobe = MutableStateFlow(com.agriquest.domain.model.Wardrobe())
+    val wardrobe = _wardrobe.asStateFlow()
+    private val wardrobeMutex = Mutex()
     /** null while loading; false until the player has entered the plant's age. */
     private val _plantAgeConfirmed = MutableStateFlow<Boolean?>(null)
     val plantAgeConfirmed = _plantAgeConfirmed.asStateFlow()
@@ -223,6 +226,7 @@ class AgriQuestRepositoryImpl(
                     _plantAvatar.value = _plantAvatar.value.copy(name = store.plantNameFlow.first())
                     _recentScans.value = store.recentScansFlow.first()
                     _plantAgeConfirmed.value = store.plantAgeConfirmedFlow.first()
+                    _wardrobe.value = store.wardrobeFlow.first()
                     refreshHealthFromScans()
                     publishMoistureHistory(store.moistureDaysFlow.first())
 
@@ -583,6 +587,32 @@ class AgriQuestRepositoryImpl(
         dataStore?.saveUserProgression(_plantAvatar.value.levelInt, _plantAvatar.value.currentXp, _plantAvatar.value.growthStage)
         dataStore?.markForSync()
         return true
+    }
+
+    /** Buys an outfit with points. Returns a message for the player. */
+    suspend fun buyOutfit(outfitId: String): String = wardrobeMutex.withLock {
+        initialized.await()
+        val outfit = com.agriquest.domain.model.Outfit.byId(outfitId) ?: return@withLock "That outfit doesn't exist."
+        val current = _wardrobe.value
+        if (outfit.id in current.owned) return@withLock "You already own the ${outfit.name}."
+        val points = current.points(_plantAvatar.value.currentXp)
+        if (points < outfit.price) return@withLock "You need ${outfit.price - points} more points for the ${outfit.name}."
+        val updated = current.copy(owned = current.owned + outfit.id, spentPoints = current.spentPoints + outfit.price,
+            equipped = current.equipped + (outfit.slot to outfit.id))
+        _wardrobe.value = updated
+        dataStore?.saveWardrobe(updated)
+        "You bought the ${outfit.name}! Your tomato is wearing it."
+    }
+
+    /** Wears an owned outfit, or takes it off if it is already worn. */
+    suspend fun toggleOutfit(outfitId: String) = wardrobeMutex.withLock {
+        val outfit = com.agriquest.domain.model.Outfit.byId(outfitId) ?: return@withLock
+        val current = _wardrobe.value
+        if (outfit.id !in current.owned) return@withLock
+        val updated = if (current.equipped[outfit.slot] == outfit.id) current.copy(equipped = current.equipped - outfit.slot)
+            else current.copy(equipped = current.equipped + (outfit.slot to outfit.id))
+        _wardrobe.value = updated
+        dataStore?.saveWardrobe(updated)
     }
 
     /** "My plant is [days] days old": sets the sowing date so the game shows the right growth stage. */

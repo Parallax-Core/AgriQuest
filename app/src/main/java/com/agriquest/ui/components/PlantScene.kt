@@ -55,7 +55,8 @@ import com.agriquest.ui.theme.AppTextColor
  * plant swaying in the breeze, and a grow lamp that makes the plant glow.
  */
 @Composable
-fun BoxScope.PlantScene(dayCount: Int, watering: Boolean, fanOn: Boolean, lightOn: Boolean, plantSize: Dp) {
+fun BoxScope.PlantScene(dayCount: Int, watering: Boolean, fanOn: Boolean, lightOn: Boolean, plantSize: Dp,
+    outfits: List<com.agriquest.domain.model.Outfit> = emptyList()) {
     val loop = rememberInfiniteTransition(label = "plantScene")
     val swayPhase by loop.animateFloat(-1f, 1f, infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "sway")
     val spin by loop.animateFloat(0f, 360f, infiniteRepeatable(tween(450, easing = LinearEasing)), label = "spin")
@@ -70,20 +71,23 @@ fun BoxScope.PlantScene(dayCount: Int, watering: Boolean, fanOn: Boolean, lightO
             center = lamp, radius = size.width * 0.7f), radius = size.width * 0.7f, center = lamp)
     }
 
-    GrowingTomatoPlant(
-        dayCount = dayCount, size = plantSize,
-        modifier = Modifier.align(Alignment.BottomCenter)
-            .graphicsLayer {
-                rotationZ = swayPhase * swayAmount
-                transformOrigin = TransformOrigin(0.5f, 0.88f)
-                compositingStrategy = CompositingStrategy.Offscreen
-            }
-            .drawWithContent {
-                drawContent()
-                // Brighter plant under the lamp: tint only the plant's own pixels.
-                if (glow > 0f) drawRect(Color(0xFFFFF59D).copy(alpha = 0.45f * glow), blendMode = BlendMode.SrcAtop)
-            }
-    )
+    // Plant and its outfits sway together in the fan's breeze.
+    Box(Modifier.align(Alignment.BottomCenter).size(plantSize).graphicsLayer {
+        rotationZ = swayPhase * swayAmount
+        transformOrigin = TransformOrigin(0.5f, 0.88f)
+    }) {
+        GrowingTomatoPlant(
+            dayCount = dayCount, size = plantSize,
+            modifier = Modifier
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    // Brighter plant under the lamp: tint only the plant's own pixels.
+                    if (glow > 0f) drawRect(Color(0xFFFFF59D).copy(alpha = 0.45f * glow), blendMode = BlendMode.SrcAtop)
+                }
+        )
+        OutfitLayer(outfits, dayCount, plantSize)
+    }
 
     Canvas(Modifier.matchParentSize()) {
         val w = size.width

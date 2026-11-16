@@ -19,6 +19,8 @@ import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.model.AccountPlantProgress
 import com.agriquest.domain.model.AiScanResult
 import com.agriquest.domain.model.QuestGoal
+import com.agriquest.domain.model.OutfitSlot
+import com.agriquest.domain.model.Wardrobe
 import com.agriquest.domain.model.QuestProgressState
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
@@ -61,6 +63,7 @@ class AgriQuestDataStore(
         private val KEY_MOISTURE_DAYS = stringPreferencesKey("moisture_daily_history")
         private val KEY_QUEST_PROGRESS = stringPreferencesKey("quest_sensor_progress")
         private val KEY_AGE_CONFIRMED = booleanPreferencesKey("plant_age_confirmed")
+        private val KEY_WARDROBE = stringPreferencesKey("outfit_wardrobe")
         /** Days of soil-moisture history kept for the Moisture History chart. */
         const val MOISTURE_HISTORY_DAYS = 7
     }
@@ -98,6 +101,27 @@ class AgriQuestDataStore(
             json.keys().asSequence().toList().filter { it !in keep }.forEach { json.remove(it) }
             p[KEY_MOISTURE_DAYS] = json.toString()
         }
+    }
+
+    /** Bought and worn outfits and points spent. Stored on this phone only. */
+    val wardrobeFlow: Flow<Wardrobe> = dataStore.data.map { preferences ->
+        runCatching {
+            val json = JSONObject(preferences[KEY_WARDROBE] ?: "{}")
+            val owned = json.optJSONArray("owned")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
+            val equippedJson = json.optJSONObject("equipped") ?: JSONObject()
+            val equipped = OutfitSlot.entries.mapNotNull { slot ->
+                equippedJson.optString(slot.name).takeIf { it.isNotBlank() && it in owned }?.let { slot to it }
+            }.toMap()
+            Wardrobe(owned, equipped, json.optInt("spent"))
+        }.getOrDefault(Wardrobe())
+    }
+
+    suspend fun saveWardrobe(wardrobe: Wardrobe) {
+        val equipped = JSONObject()
+        wardrobe.equipped.forEach { (slot, id) -> equipped.put(slot.name, id) }
+        val json = JSONObject().put("owned", JSONArray(wardrobe.owned.toList())).put("equipped", equipped)
+            .put("spent", wardrobe.spentPoints)
+        dataStore.edit { it[KEY_WARDROBE] = json.toString() }
     }
 
     /** True once the player has told the app how old the plant is. */
