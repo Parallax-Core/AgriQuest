@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # needed to create the experimental GitHub release
 
 concurrency:
   group: agriquest-phone-test
@@ -81,6 +81,26 @@ jobs:
           path: release/AgriQuest.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Publish experimental GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ env.AGRIQUEST_VERSION_CODE }}
+          VERSION: ${{ env.AGRIQUEST_VERSION_NAME }}
+        run: |
+          tag="phone-test-$CODE"
+          short_sha="$(git rev-parse --short HEAD)"
+          cp release/AgriQuest.apk "release/AgriQuest-experimental-$VERSION.apk"
+          gh release create "$tag" "release/AgriQuest-experimental-$VERSION.apk" \
+            --target "$GITHUB_SHA" \
+            --title "Experimental $VERSION (phone-test @ $short_sha)" \
+            --notes "⚠️ **Experimental build** from the \`phone-test\` branch for testing only. Not an official AgriQuest release, and it is not sent to the app's in-app updates.
+
+          Commit: $GITHUB_SHA" \
+            --prerelease --latest=false
+          # Keep only the 5 newest experimental releases (and their tags).
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("phone-test-"))] | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
+            while read -r old; do gh release delete "$old" --cleanup-tag --yes; done
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/AgriQuest-release.jks"
