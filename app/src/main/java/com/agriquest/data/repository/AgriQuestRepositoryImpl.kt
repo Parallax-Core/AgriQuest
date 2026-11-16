@@ -73,6 +73,9 @@ class AgriQuestRepositoryImpl(
 ) : AgriQuestRepository {
 
     companion object {
+        /** Ages accepted by "How many days old is your plant?". */
+        const val MAX_PLANT_AGE_DAYS = 150
+
         suspend fun forAccount(context: Context, session: AuthSession): AgriQuestRepositoryImpl {
             val store = AgriQuestDataStore(context.applicationContext, session.userId)
             val api = SupabasePlantApi(session)
@@ -93,6 +96,9 @@ class AgriQuestRepositoryImpl(
     private val _syncStatus = MutableStateFlow(ProgressSyncStatus.SAVED)
     val syncStatus = _syncStatus.asStateFlow()
     private val _loginDays = MutableStateFlow(0)
+    /** null while loading; false until the player has entered the plant's age. */
+    private val _plantAgeConfirmed = MutableStateFlow<Boolean?>(null)
+    val plantAgeConfirmed = _plantAgeConfirmed.asStateFlow()
     val loginDays = _loginDays.asStateFlow()
     private var monitoringBinding: PlantMonitoringBinding? = null
     private val pairingMutex = Mutex()
@@ -214,6 +220,7 @@ class AgriQuestRepositoryImpl(
                     val savedLastResetDate = store.lastResetDateFlow.first()
                     _plantAvatar.value = _plantAvatar.value.copy(name = store.plantNameFlow.first())
                     _recentScans.value = store.recentScansFlow.first()
+                    _plantAgeConfirmed.value = store.plantAgeConfirmedFlow.first()
                     refreshHealthFromScans()
                     publishMoistureHistory(store.moistureDaysFlow.first())
 
@@ -252,6 +259,7 @@ class AgriQuestRepositoryImpl(
                 }
             }
         } ?: run {
+            _plantAgeConfirmed.value = false
             initialized.complete(Unit)
             startSimulationRoutine()
         }
@@ -572,6 +580,24 @@ class AgriQuestRepositoryImpl(
         updateAvatarProgression(_plantAvatar.value.currentXp)
         dataStore?.saveUserProgression(_plantAvatar.value.levelInt, _plantAvatar.value.currentXp, _plantAvatar.value.growthStage)
         dataStore?.markForSync()
+        return true
+    }
+
+    /** "My plant is [days] days old": sets the sowing date so the game shows the right growth stage. */
+    suspend fun confirmPlantAge(days: Int): Boolean {
+        if (days !in 0..MAX_PLANT_AGE_DAYS) return false
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(System.currentTimeMillis() - days * 86_400_000L))
+        if (!setSowingDate(date)) return false
+        dataStore?.savePlantAgeConfirmed()
+        _plantAgeConfirmed.value = true
+        // Quests depend on the growth stage, so refresh unclaimed ones for the new age.
+        questMutex.withLock {
+            val claimed = _quests.value.filter { it.isClaimed }
+            val fresh = questsFor(getTodayDateString())
+            _quests.value = claimed + fresh.filter { f -> claimed.none { it.id == f.id } }
+                .take((fresh.size - claimed.size).coerceAtLeast(0))
+            applyQuestProgress()
+        }
         return true
     }
 

@@ -114,7 +114,13 @@ fun DashboardScreen(
             showConnectGate = false
         }
     }
-    if (showConnectGate) {
+    // First question before the game: how old is the plant? Then the Connect screen.
+    val plantAgeConfirmed by viewModel.plantAgeConfirmed.collectAsStateWithLifecycle()
+    if (plantAgeConfirmed == false) {
+        PlantAgeDialog(initialDays = uiState.plant.dayCount,
+            maxDays = com.agriquest.data.repository.AgriQuestRepositoryImpl.MAX_PLANT_AGE_DAYS,
+            onConfirm = { viewModel.confirmPlantAge(it) })
+    } else if (showConnectGate && plantAgeConfirmed == true) {
         ConnectGateDialog(
             connection = uiState.connection,
             usingHardware = usingHardware,
@@ -291,7 +297,7 @@ fun HomeDashboardContent(
                     }
                 }
             }
-            PlantAvatarCanvas(growthStage = uiState.plant.growthStage, size = 245.dp,
+            GrowingTomatoPlant(dayCount = uiState.plant.dayCount, size = 245.dp,
                 modifier = Modifier.align(Alignment.BottomCenter))
         }
         PixelPanel {

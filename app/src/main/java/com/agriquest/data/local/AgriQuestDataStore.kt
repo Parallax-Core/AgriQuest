@@ -60,6 +60,7 @@ class AgriQuestDataStore(
         private val KEY_SCANS = stringPreferencesKey("recent_scans")
         private val KEY_MOISTURE_DAYS = stringPreferencesKey("moisture_daily_history")
         private val KEY_QUEST_PROGRESS = stringPreferencesKey("quest_sensor_progress")
+        private val KEY_AGE_CONFIRMED = booleanPreferencesKey("plant_age_confirmed")
         /** Days of soil-moisture history kept for the Moisture History chart. */
         const val MOISTURE_HISTORY_DAYS = 7
     }
@@ -98,6 +99,10 @@ class AgriQuestDataStore(
             p[KEY_MOISTURE_DAYS] = json.toString()
         }
     }
+
+    /** True once the player has told the app how old the plant is. */
+    val plantAgeConfirmedFlow: Flow<Boolean> = dataStore.data.map { it[KEY_AGE_CONFIRMED] ?: false }
+    suspend fun savePlantAgeConfirmed() { dataStore.edit { it[KEY_AGE_CONFIRMED] = true } }
 
     /** Today's sensor quest progress (null if never saved or unreadable). */
     val questProgressFlow: Flow<QuestProgressState?> = dataStore.data.map { preferences ->

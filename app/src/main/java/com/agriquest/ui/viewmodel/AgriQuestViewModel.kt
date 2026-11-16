@@ -60,6 +60,17 @@ class AgriQuestViewModel(
             .map { devices -> devices.map { DiscoveredBleDevice(it.deviceName, it.macAddress, it.serviceUuid, it.rssi) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** null while loading, false until the player has entered the plant's age. */
+    val plantAgeConfirmed: StateFlow<Boolean?> =
+        (repository as? AgriQuestRepositoryImpl)?.plantAgeConfirmed ?: MutableStateFlow(true)
+
+    fun confirmPlantAge(days: Int) {
+        viewModelScope.launch {
+            val ok = (repository as? AgriQuestRepositoryImpl)?.confirmPlantAge(days) ?: false
+            _notificationEvents.emit(if (ok) "Got it! Your plant is $days day(s) old." else "Enter a number of days from 0 to 150.")
+        }
+    }
+
     private var pairingJob: Job? = null
     fun connectEsp32Device(macAddress: String, onPaired: () -> Unit = {}) {
         if (pairingJob?.isActive == true) return

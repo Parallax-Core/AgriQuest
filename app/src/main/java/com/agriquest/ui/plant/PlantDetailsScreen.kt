@@ -114,7 +114,7 @@ private fun WateringControls(telemetry: TelemetryData, status: WateringStatus?, 
 fun PlantHeroCard(plant: PlantAvatar, modifier: Modifier = Modifier) {
     PixelPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            PlantAvatarCanvas(growthStage = plant.growthStage, size = 98.dp)
+            GrowingTomatoPlant(dayCount = plant.dayCount, size = 98.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
