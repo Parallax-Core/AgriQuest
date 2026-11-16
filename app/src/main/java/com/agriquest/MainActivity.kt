@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        com.agriquest.ui.sound.GameSounds.init(this)
         setContent {
             AgriQuestTheme {
                 AppUpdatePrompt()

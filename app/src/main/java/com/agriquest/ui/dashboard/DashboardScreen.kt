@@ -43,6 +43,8 @@ import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.state.LeafScanState
 import com.agriquest.ui.theme.*
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
+import com.agriquest.ui.sound.GameSound
+import com.agriquest.ui.sound.GameSounds
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +62,25 @@ fun DashboardScreen(
     val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
     val discoveredDevices by viewModel.discoveredDevices.collectAsStateWithLifecycle()
     val wateringStatus by viewModel.wateringStatus.collectAsStateWithLifecycle()
+    val fanOn by viewModel.fanOn.collectAsStateWithLifecycle()
+    val lightOn by viewModel.lightOn.collectAsStateWithLifecycle()
+    val soundMuted by GameSounds.muted.collectAsStateWithLifecycle()
+    val watering = wateringStatus?.phase == WateringStatus.Phase.RUNNING || uiState.actuator.isPumpActive
+    LaunchedEffect(watering) { if (watering) GameSounds.play(GameSound.WATER) }
+    // Quiet garden ambience while the game is on screen.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> GameSounds.startAmbient()
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> GameSounds.stopAmbient()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) GameSounds.startAmbient()
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); GameSounds.stopAmbient() }
+    }
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -177,10 +198,25 @@ fun DashboardScreen(
         },
         onNextQuizQuestion = { viewModel.nextQuizQuestion() },
         wateringStatus = wateringStatus,
-        onWaterPlant = { viewModel.waterPlant() },
-        snackbarHostState = snackbarHostState
+        onWaterPlant = { GameSounds.play(GameSound.TAP); viewModel.waterPlant() },
+        snackbarHostState = snackbarHostState,
+        actuators = ActuatorUi(watering = watering, fanOn = fanOn, lightOn = lightOn,
+            onFan = { GameSounds.play(GameSound.FAN); viewModel.toggleFan() },
+            onLight = { GameSounds.play(GameSound.LIGHT); viewModel.toggleLight() },
+            soundMuted = soundMuted, onToggleSound = { GameSounds.setMuted(!soundMuted) })
     )
 }
+
+/** State and actions for the Water / Fan / Light buttons on the home scene. */
+data class ActuatorUi(
+    val watering: Boolean = false,
+    val fanOn: Boolean = false,
+    val lightOn: Boolean = false,
+    val onFan: () -> Unit = {},
+    val onLight: () -> Unit = {},
+    val soundMuted: Boolean = false,
+    val onToggleSound: () -> Unit = {}
+)
 
 /**
  * State-driven screen switcher rendering the active tab content:
@@ -210,7 +246,8 @@ fun DashboardScreenContent(
     onNextQuizQuestion: () -> Unit = {},
     wateringStatus: WateringStatus? = null,
     onWaterPlant: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    actuators: ActuatorUi = ActuatorUi()
 ) {
     when (selectedTab) {
         1 -> PlantDetailsScreenContent(
@@ -262,7 +299,10 @@ fun DashboardScreenContent(
             onPlantSourceSelected = onPlantSourceSelected,
             onClaimQuest = onClaimQuest,
             onScanForEsp32 = onScanForEsp32,
-            snackbarHostState = snackbarHostState
+            snackbarHostState = snackbarHostState,
+            actuators = actuators,
+            onWaterPlant = onWaterPlant,
+            wateringStatus = wateringStatus
         )
     }
 }
@@ -277,7 +317,10 @@ fun HomeDashboardContent(
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
     onScanForEsp32: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    actuators: ActuatorUi = ActuatorUi(),
+    onWaterPlant: () -> Unit = {},
+    wateringStatus: WateringStatus? = null
 ) {
     var showSourceSettings by remember { mutableStateOf(false) }
     AppScreen(modifier = modifier, uiState = uiState, selectedTab = selectedTab,
@@ -297,9 +340,14 @@ fun HomeDashboardContent(
                     }
                 }
             }
-            GrowingTomatoPlant(dayCount = uiState.plant.dayCount, size = 245.dp,
-                modifier = Modifier.align(Alignment.BottomCenter))
+            PlantScene(dayCount = uiState.plant.dayCount, watering = actuators.watering,
+                fanOn = actuators.fanOn, lightOn = actuators.lightOn, plantSize = 245.dp)
         }
+        ActuatorBar(watering = actuators.watering, fanOn = actuators.fanOn, lightOn = actuators.lightOn,
+            canWater = uiState.telemetry.needsWatering, onWater = onWaterPlant, onFan = actuators.onFan,
+            onLight = actuators.onLight,
+            note = wateringStatus?.message ?: if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
+                "Water runs the real ESP32 pump. Fan and Light are shown in the game only for now." else null)
         PixelPanel {
             PlantLevelBar(uiState)
             HorizontalDivider(color = AppCardBorder)
@@ -335,6 +383,9 @@ fun HomeDashboardContent(
                 }
                 if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
                     TextButton(onClick = { showSourceSettings = false; onScanForEsp32() }) { Text("Connect ESP32") }
+                TextButton(onClick = actuators.onToggleSound) {
+                    Text(if (actuators.soundMuted) "Sound: Off (tap to turn on)" else "Sound: On (tap to mute)")
+                }
             }
         },
         confirmButton = { TextButton({ showSourceSettings = false }) { Text("Done") } }

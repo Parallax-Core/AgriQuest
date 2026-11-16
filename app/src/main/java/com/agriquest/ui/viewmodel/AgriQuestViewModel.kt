@@ -71,6 +71,29 @@ class AgriQuestViewModel(
         }
     }
 
+    // In-game Fan and Light. The ESP32 only supports the pump for now, so on hardware these are
+    // shown in the game only (the player is told so).
+    private val _fanOn = MutableStateFlow(false)
+    val fanOn: StateFlow<Boolean> = _fanOn.asStateFlow()
+    private val _lightOn = MutableStateFlow(false)
+    val lightOn: StateFlow<Boolean> = _lightOn.asStateFlow()
+
+    fun toggleFan() {
+        _fanOn.value = !_fanOn.value
+        hardwareOnlyPumpNotice("Fan")
+    }
+
+    fun toggleLight() {
+        _lightOn.value = !_lightOn.value
+        hardwareOnlyPumpNotice("Light")
+    }
+
+    private fun hardwareOnlyPumpNotice(actuator: String) {
+        if (uiState.value.plantSource == PlantSource.ESP32_HARDWARE) viewModelScope.launch {
+            _notificationEvents.emit("$actuator is shown in the game only. ESP32 support for the $actuator is coming soon.")
+        }
+    }
+
     private var pairingJob: Job? = null
     fun connectEsp32Device(macAddress: String, onPaired: () -> Unit = {}) {
         if (pairingJob?.isActive == true) return
