@@ -1,7 +1,6 @@
 package com.agriquest.ui.dashboard
 
 import android.net.Uri
-import android.widget.Toast
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
@@ -99,7 +98,7 @@ fun DashboardScreen(
     // Listen for notification events (e.g., pump triggers, AI diagnostic results, tab status)
     LaunchedEffect(viewModel) {
         viewModel.notificationEvents.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            // One message, one place: the snackbar (a Toast as well showed every message twice).
             snackbarHostState.showSnackbar(message)
         }
     }

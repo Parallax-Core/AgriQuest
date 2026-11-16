@@ -56,6 +56,9 @@ class AgriQuestDataStore(
         private val KEY_REVISION = longPreferencesKey("cloud_revision")
         private val KEY_DIRTY = booleanPreferencesKey("cloud_dirty")
         private val KEY_SCANS = stringPreferencesKey("recent_scans")
+        private val KEY_MOISTURE_DAYS = stringPreferencesKey("moisture_daily_history")
+        /** Days of soil-moisture history kept for the Moisture History chart. */
+        const val MOISTURE_HISTORY_DAYS = 7
     }
 
     val cloudDirtyFlow = dataStore.data.map { it[KEY_DIRTY] ?: false }
@@ -71,6 +74,26 @@ class AgriQuestDataStore(
                     it.optString("heatmap").takeIf(String::isNotBlank))
             } }
         }.getOrDefault(emptyList())
+    }
+
+    /** Latest soil moisture per calendar day ("yyyy-MM-dd" to percent), oldest first. */
+    val moistureDaysFlow: Flow<List<Pair<String, Float>>> = dataStore.data.map { preferences ->
+        runCatching {
+            val json = JSONObject(preferences[KEY_MOISTURE_DAYS] ?: "{}")
+            json.keys().asSequence().map { it to json.getDouble(it).toFloat() }.sortedBy { it.first }.toList()
+        }.getOrDefault(emptyList())
+    }
+
+    /** Stores today's reading (one value per day, newest wins) and keeps the last [MOISTURE_HISTORY_DAYS] days. */
+    suspend fun recordMoisture(date: String, percent: Float) {
+        if (!percent.isFinite()) return
+        dataStore.edit { p ->
+            val json = runCatching { JSONObject(p[KEY_MOISTURE_DAYS] ?: "{}") }.getOrDefault(JSONObject())
+            json.put(date, percent.toDouble())
+            val keep = json.keys().asSequence().toList().sorted().takeLast(MOISTURE_HISTORY_DAYS).toSet()
+            json.keys().asSequence().toList().filter { it !in keep }.forEach { json.remove(it) }
+            p[KEY_MOISTURE_DAYS] = json.toString()
+        }
     }
 
     suspend fun saveScans(scans: List<AiScanResult>) {

@@ -24,6 +24,7 @@ import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.model.WateringStatus
+import com.agriquest.domain.model.MoistureHistoryEntry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import com.agriquest.domain.repository.AgriQuestRepository
@@ -107,6 +108,9 @@ class AgriQuestRepositoryImpl(
     private var simulationJob: Job? = null
     private var bleStateJob: Job? = null
     private var bleTelemetryJob: Job? = null
+    // Declared before init so background telemetry never sees them uninitialized.
+    private val memoryMoistureDays = java.util.TreeMap<String, Float>()
+    @Volatile private var lastConfirmedWateringAt: Long = 0L
 
     private val _telemetryData = MutableStateFlow(
         TelemetryData(
@@ -129,7 +133,7 @@ class AgriQuestRepositoryImpl(
             currentXp = 0,
             maxXp = PlantGrowthStage.GERMINATION.maxXp,
             growthStage = PlantGrowthStage.GERMINATION,
-            statusTag = "Vibrant & Healthy",
+            statusTag = "Scan a leaf to check health",
             streakDays = 0,
             targetStreakDays = 7,
             sowingDate = trackingStart,
@@ -154,8 +158,8 @@ class AgriQuestRepositoryImpl(
     private val _connectionState = MutableStateFlow(
         ConnectionState(
             deviceName = "ESP32",
-            status = ConnectionStatus.CONNECTED,
-            statusText = "Connected"
+            status = ConnectionStatus.DISCONNECTED,
+            statusText = "Not connected"
         )
     )
     override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -206,6 +210,8 @@ class AgriQuestRepositoryImpl(
                     val savedLastResetDate = store.lastResetDateFlow.first()
                     _plantAvatar.value = _plantAvatar.value.copy(name = store.plantNameFlow.first())
                     _recentScans.value = store.recentScansFlow.first()
+                    refreshHealthFromScans()
+                    publishMoistureHistory(store.moistureDaysFlow.first())
 
                     memoryLastResetDate = savedLastResetDate
                     _plantSource.value = source
@@ -325,9 +331,7 @@ class AgriQuestRepositoryImpl(
 
         simulationJob = scope.launch {
             simulationEngine.telemetryFlow(_telemetryData.value.withMissingFilled()).collect { simulatedTelemetry ->
-                _telemetryData.value = simulatedTelemetry
-                dataStore?.saveTelemetryData(simulatedTelemetry)
-                updateQuestProgressForTelemetry(simulatedTelemetry)
+                onNewTelemetry(simulatedTelemetry)
             }
         }
     }
@@ -349,10 +353,7 @@ class AgriQuestRepositoryImpl(
                         monitoringBinding = accountApi.monitoringBinding(plantId, monitoringBinding?.deviceId)
                         val binding = monitoringBinding
                         val reading = binding?.let { accountApi.latestReading(it) }
-                        if (reading != null) {
-                            _telemetryData.value = reading.telemetry
-                            dataStore?.saveTelemetryData(reading.telemetry)
-                        }
+                        if (reading != null) onNewTelemetry(reading.telemetry)
                         _connectionState.value = ConnectionState(deviceName = binding?.deviceId ?: "ESP32",
                             status = if (reading?.isFresh() == true) ConnectionStatus.CONNECTED else ConnectionStatus.AWAITING_DEVICE,
                             statusText = if (reading != null) "Last reading: ${reading.recordedAt}" else "Awaiting paired ESP32 data")
@@ -372,9 +373,7 @@ class AgriQuestRepositoryImpl(
 
         bleTelemetryJob = scope.launch {
             esp32BleManager.telemetryDataFlow.collect { newTelemetry ->
-                _telemetryData.value = newTelemetry
-                dataStore?.saveTelemetryData(newTelemetry)
-                updateQuestProgressForTelemetry(newTelemetry)
+                onNewTelemetry(newTelemetry)
             }
         }
 
@@ -396,22 +395,62 @@ class AgriQuestRepositoryImpl(
         }
     }
 
-    private fun updateQuestProgressForTelemetry(telemetry: TelemetryData) {
-        val questList = _quests.value.toMutableList()
-        val thirstyRootsIndex = questList.indexOfFirst { it.id == "quest_thirsty_roots" }
-        if (thirstyRootsIndex != -1) {
-            val q = questList[thirstyRootsIndex]
-            if (!q.isClaimed) {
-                if (telemetry.soilMoisture >= 60.0f) {
-                    questList[thirstyRootsIndex] = q.copy(progress = 1.0f, isClaimable = true)
-                } else {
-                    val progressRatio = (telemetry.soilMoisture / 60.0f).coerceIn(0.0f, 1.0f)
-                    questList[thirstyRootsIndex] = q.copy(progress = progressRatio, isClaimable = false)
-                }
-                _quests.value = questList
-                updateActiveQuest(questList)
-            }
+    /** Every sensor reading (simulated, cloud or Bluetooth) goes through here. */
+    private suspend fun onNewTelemetry(telemetry: TelemetryData) {
+        _telemetryData.value = telemetry
+        dataStore?.saveTelemetryData(telemetry)
+        recordMoisture(telemetry)
+    }
+
+    private suspend fun recordMoisture(telemetry: TelemetryData) {
+        val moisture = telemetry.soilMoisture
+        if (!moisture.isFinite()) return
+        val store = dataStore
+        if (store != null) {
+            store.recordMoisture(getTodayDateString(), moisture)
+            publishMoistureHistory(store.moistureDaysFlow.first())
+        } else {
+            memoryMoistureDays[getTodayDateString()] = moisture
+            while (memoryMoistureDays.size > AgriQuestDataStore.MOISTURE_HISTORY_DAYS) memoryMoistureDays.remove(memoryMoistureDays.firstKey())
+            publishMoistureHistory(memoryMoistureDays.toList())
         }
+    }
+
+    /** Turns ("2026-11-16", 64%) pairs into chart entries labelled Today / Yesterday / "Nov 14". */
+    private fun publishMoistureHistory(days: List<Pair<String, Float>>) {
+        val today = getTodayDateString()
+        val labelFormat = SimpleDateFormat("MMM d", Locale.getDefault())
+        val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val entries = days.sortedBy { it.first }.map { (date, percent) ->
+            val ago = calculateDaysBetween(date, today)
+            val label = when (ago) {
+                0L -> "Today"
+                1L -> "Yesterday"
+                else -> runCatching { labelFormat.format(requireNotNull(parser.parse(date))) }.getOrDefault(date)
+            }
+            MoistureHistoryEntry(label, percent)
+        }
+        _plantAvatar.value = _plantAvatar.value.copy(moistureHistory = entries)
+    }
+
+    /** Health = share of healthy leaf scans in the last 7 days. Unknown (null) until a leaf is scanned. */
+    private fun refreshHealthFromScans() {
+        val weekAgo = System.currentTimeMillis() - 7L * 86_400_000L
+        val recent = _recentScans.value.filter { scan ->
+            val takenAt = scan.id.removePrefix("scan_").toLongOrNull() ?: return@filter false
+            takenAt >= weekAgo
+        }
+        val percent = if (recent.isEmpty()) null else recent.count { it.isHealthy } * 100 / recent.size
+        _plantAvatar.value = _plantAvatar.value.copy(
+            healthPercent = percent,
+            healthScanCount = recent.size,
+            statusTag = when {
+                percent == null -> "Scan a leaf to check health"
+                percent >= 80 -> "Vibrant & Healthy"
+                percent >= 50 -> "Some leaves need attention"
+                else -> "Needs care: disease detected"
+            }
+        )
     }
 
     private fun updateAvatarProgression(totalXp: Int, streakDays: Int = _streakDays.value) {
@@ -568,7 +607,7 @@ class AgriQuestRepositoryImpl(
             dataStore?.saveLastResetDate(todayString)
             dataStore?.markForSync()
             resetQuizState()
-            return true
+            return false // first launch: nothing was reset, so no "New Day" message
         } else if (todayString > lastResetDate) {
             if (calculateDaysBetween(lastResetDate, todayString) > 1) {
                 resetStreak()
@@ -637,31 +676,9 @@ class AgriQuestRepositoryImpl(
         dataStore?.saveTelemetryData(updatedTelemetry)
         val updatedMoisture = updatedTelemetry.soilMoisture
 
-                // Watering does not award repeatable XP.
-
-        // 3. Checks and updates progress on care quests ("🌱 First Water" and "⚡ Thirsty Roots")
-        val questList = _quests.value.toMutableList()
-
-        // "🌱 First Water" quest update
-        val firstWaterIndex = questList.indexOfFirst { it.id == "quest_first_water" }
-        if (firstWaterIndex != -1) {
-            val q = questList[firstWaterIndex]
-            if (!q.isClaimed) {
-                questList[firstWaterIndex] = q.copy(progress = 1.0f, isClaimable = true)
-            }
-        }
-
-        // "⚡ Thirsty Roots" quest update
-        val thirstyRootsIndex = questList.indexOfFirst { it.id == "quest_thirsty_roots" }
-        if (thirstyRootsIndex != -1) {
-            val q = questList[thirstyRootsIndex]
-            if (!q.isClaimed && updatedMoisture >= 60.0f) {
-                questList[thirstyRootsIndex] = q.copy(progress = 1.0f, isClaimable = true)
-            }
-        }
-
-        _quests.value = questList
-        updateActiveQuest(questList)
+        // Watering does not award repeatable XP. Quest progress comes from sensor readings.
+        recordMoisture(updatedTelemetry)
+        completeFirstWaterQuest()
 
         // 4. Send command if ESP32 Hardware is active
         if (_plantSource.value == PlantSource.ESP32_HARDWARE) {
@@ -758,14 +775,9 @@ class AgriQuestRepositoryImpl(
         else -> error?.message ?: "The watering request failed."
     }
 
-    /** A real watering also completes the "First Water" quest. */
+    /** Called when the ESP32 reports a finished watering; sensor quests use it (see QuestEvaluator). */
     private fun completeFirstWaterQuest() {
-        val questList = _quests.value.toMutableList()
-        val index = questList.indexOfFirst { it.id == "quest_first_water" }
-        if (index == -1 || questList[index].isClaimed) return
-        questList[index] = questList[index].copy(progress = 1.0f, isClaimable = true)
-        _quests.value = questList
-        updateActiveQuest(questList)
+        lastConfirmedWateringAt = System.currentTimeMillis()
     }
 
     override fun toggleFanMode() {
@@ -783,9 +795,7 @@ class AgriQuestRepositoryImpl(
      */
     override fun updateTelemetryFromBle(newData: TelemetryData) {
         if (accountApi != null) return // Authenticated monitoring accepts only the paired, RLS-filtered sensor path.
-        _telemetryData.value = newData
-        scope.launch { dataStore?.saveTelemetryData(newData) }
-        updateQuestProgressForTelemetry(newData)
+        scope.launch { onNewTelemetry(newData) }
     }
 
     /**
@@ -838,6 +848,7 @@ class AgriQuestRepositoryImpl(
         )
         _recentScans.value = listOf(newScan) + _recentScans.value
         dataStore?.saveScans(_recentScans.value)
+        refreshHealthFromScans()
         return newScan
     }
 
@@ -892,8 +903,6 @@ class AgriQuestRepositoryImpl(
         if (isCorrect) {
             addXp(question.xpReward)
         }
-        val todayString = getTodayDateString()
-        dataStore?.saveQuizCompletedDate(todayString)
         dataStore?.markForSync()
         return isCorrect
     }

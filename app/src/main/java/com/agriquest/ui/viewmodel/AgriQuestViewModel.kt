@@ -402,7 +402,7 @@ class AgriQuestViewModel(
         viewModelScope.launch {
             val entry = JournalEntry(
                 id = System.currentTimeMillis().toString(),
-                date = "Today",
+                date = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date()),
                 note = note,
                 category = category
             )

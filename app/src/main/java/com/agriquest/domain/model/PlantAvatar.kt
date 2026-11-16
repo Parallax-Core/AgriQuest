@@ -15,7 +15,8 @@ package com.agriquest.domain.model
  * @param targetStreakDays Target streak duration (e.g. 7)
  * @param speechBubble Speech bubble message from avatar
  * @param dayCount Days since planting (e.g. 47)
- * @param healthPercent Plant health percentage (e.g. 92)
+ * @param healthPercent Share of healthy leaf scans in the last 7 days; null until a leaf is scanned
+ * @param healthScanCount Number of leaf scans behind [healthPercent]
  * @param healthSubtext Detailed health status subtext
  * @param stageTag Growth stage badge text ("Stage 3 - Mature")
  * @param journalEntries Care log notes list
@@ -29,14 +30,15 @@ data class PlantAvatar(
     val currentXp: Int = 0,
     val maxXp: Int = PlantGrowthStage.GERMINATION.maxXp,
     val growthStage: PlantGrowthStage = PlantGrowthStage.GERMINATION,
-    val statusTag: String = "Vibrant & Healthy",
+    val statusTag: String = "Scan a leaf to check health",
     val streakDays: Int = 0,
     val targetStreakDays: Int = 7,
     val speechBubble: String = PlantGrowthStage.GERMINATION.speechBubble,
     val sowingDate: String = "",
     val dailyXp: Int = 0,
     val dayCount: Int = 0,
-    val healthPercent: Int = 92,
+    val healthPercent: Int? = null,
+    val healthScanCount: Int = 0,
     val healthSubtext: String = "Observe your plant to assess its condition",
     val stageTag: String = "Stage ${growthStage.stageLevel + 1} - ${growthStage.stageTitle}",
     val journalEntries: List<JournalEntry> = emptyList(),
@@ -70,4 +72,8 @@ data class PlantAvatar(
     /** Calculated XP progress ratio between 0.0f and 1.0f. */
     val xpProgress: Float
         get() = if (maxXp > 0) (currentXp.toFloat() / maxXp.toFloat()).coerceIn(0f, 1f) else 0f
+
+    /** "78%" once a leaf has been scanned, otherwise "—". */
+    val healthText: String
+        get() = healthPercent?.let { "$it%" } ?: "—"
 }

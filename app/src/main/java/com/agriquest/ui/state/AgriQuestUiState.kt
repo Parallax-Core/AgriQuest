@@ -50,7 +50,7 @@ data class AgriQuestUiState(
         get() = achievements.filter { it.isUnlocked }.sumOf { it.xpReward }
 
     /** Exposes plant health percentage (e.g. 92%). */
-    val plantHealthPercent: Int
+    val plantHealthPercent: Int?
         get() = plant.healthPercent
 
     /** Exposes plant day count (e.g. Day 47). */

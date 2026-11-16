@@ -20,8 +20,8 @@ enum class ConnectionStatus {
  */
 data class ConnectionState(
     val deviceName: String = "ESP32",
-    val status: ConnectionStatus = ConnectionStatus.CONNECTED,
-    val statusText: String = "Connected"
+    val status: ConnectionStatus = ConnectionStatus.DISCONNECTED,
+    val statusText: String = "Not connected"
 ) {
     /** Indicator boolean for UI status pill (true = green indicator when connected). */
     val isIndicatorGreen: Boolean
