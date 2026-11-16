@@ -18,6 +18,8 @@ import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.model.AccountPlantProgress
 import com.agriquest.domain.model.AiScanResult
+import com.agriquest.domain.model.QuestGoal
+import com.agriquest.domain.model.QuestProgressState
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -57,6 +59,7 @@ class AgriQuestDataStore(
         private val KEY_DIRTY = booleanPreferencesKey("cloud_dirty")
         private val KEY_SCANS = stringPreferencesKey("recent_scans")
         private val KEY_MOISTURE_DAYS = stringPreferencesKey("moisture_daily_history")
+        private val KEY_QUEST_PROGRESS = stringPreferencesKey("quest_sensor_progress")
         /** Days of soil-moisture history kept for the Moisture History chart. */
         const val MOISTURE_HISTORY_DAYS = 7
     }
@@ -94,6 +97,28 @@ class AgriQuestDataStore(
             json.keys().asSequence().toList().filter { it !in keep }.forEach { json.remove(it) }
             p[KEY_MOISTURE_DAYS] = json.toString()
         }
+    }
+
+    /** Today's sensor quest progress (null if never saved or unreadable). */
+    val questProgressFlow: Flow<QuestProgressState?> = dataStore.data.map { preferences ->
+        val raw = preferences[KEY_QUEST_PROGRESS] ?: return@map null
+        runCatching {
+            val json = JSONObject(raw)
+            val minutesJson = json.optJSONObject("minutes") ?: JSONObject()
+            val minutes = QuestGoal.entries.mapNotNull { goal ->
+                if (minutesJson.has(goal.name)) goal to minutesJson.getDouble(goal.name).toFloat() else null
+            }.toMap()
+            QuestProgressState(json.getString("date"), minutes, json.optLong("last"),
+                json.optBoolean("dry"), json.optBoolean("recovered"), json.optLong("watered"))
+        }.getOrNull()
+    }
+
+    suspend fun saveQuestProgress(state: QuestProgressState) {
+        val minutes = JSONObject()
+        state.minutes.forEach { (goal, value) -> minutes.put(goal.name, value.toDouble()) }
+        val json = JSONObject().put("date", state.date).put("minutes", minutes).put("last", state.lastReadingAt)
+            .put("dry", state.sawDry).put("recovered", state.recovered).put("watered", state.wateredAt)
+        dataStore.edit { it[KEY_QUEST_PROGRESS] = json.toString() }
     }
 
     suspend fun saveScans(scans: List<AiScanResult>) {

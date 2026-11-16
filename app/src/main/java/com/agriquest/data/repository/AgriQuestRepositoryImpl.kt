@@ -25,6 +25,9 @@ import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.model.WateringStatus
 import com.agriquest.domain.model.MoistureHistoryEntry
+import com.agriquest.domain.model.QuestEvaluator
+import com.agriquest.domain.model.QuestProgressState
+import com.agriquest.domain.model.SensorKind
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import com.agriquest.domain.repository.AgriQuestRepository
@@ -110,7 +113,8 @@ class AgriQuestRepositoryImpl(
     private var bleTelemetryJob: Job? = null
     // Declared before init so background telemetry never sees them uninitialized.
     private val memoryMoistureDays = java.util.TreeMap<String, Float>()
-    @Volatile private var lastConfirmedWateringAt: Long = 0L
+    @Volatile private var questProgress = QuestProgressState(getTodayDateString())
+    private val questMutex = Mutex()
 
     private val _telemetryData = MutableStateFlow(
         TelemetryData(
@@ -223,7 +227,11 @@ class AgriQuestRepositoryImpl(
                     }
                     _streakDays.value = streak
                     updateAvatarProgression(xp, streak)
+                    _quests.value = questsFor(getTodayDateString())
                     updateQuestsWithClaimed(claimedIds)
+                    questProgress = store.questProgressFlow.first()?.takeIf { it.date == getTodayDateString() }
+                        ?: QuestProgressState(getTodayDateString())
+                    applyQuestProgress()
 
                     // Midnight date check & quest reset on repository startup
                     refreshDailyQuests()
@@ -428,6 +436,37 @@ class AgriQuestRepositoryImpl(
         _telemetryData.value = telemetry
         dataStore?.saveTelemetryData(telemetry)
         recordMoisture(telemetry)
+        updateQuestsFromReading(telemetry)
+    }
+
+    /** Today's quests for the plant's stage and the sensors that actually report values. */
+    private fun questsFor(date: String): List<Quest> =
+        Quest.forDate(date, _plantAvatar.value.growthStage, SensorKind.availableIn(_telemetryData.value))
+
+    private suspend fun updateQuestsFromReading(telemetry: TelemetryData) = questMutex.withLock {
+        val today = getTodayDateString()
+        if (questProgress.date != today) questProgress = QuestProgressState(today)
+        questProgress = QuestEvaluator.onReading(questProgress, telemetry, System.currentTimeMillis())
+        replaceQuestsWithoutSensor(telemetry)
+        applyQuestProgress()
+        dataStore?.saveQuestProgress(questProgress)
+    }
+
+    /** If the device lacks a sensor an unclaimed quest needs (e.g. no light sensor), swap in quests it can track. */
+    private fun replaceQuestsWithoutSensor(telemetry: TelemetryData) {
+        val sensors = SensorKind.availableIn(telemetry)
+        val current = _quests.value
+        if (current.none { !it.isClaimed && it.goal.sensor != null && it.goal.sensor !in sensors }) return
+        val fresh = Quest.forDate(getTodayDateString(), _plantAvatar.value.growthStage, sensors)
+        val claimed = current.filter { it.isClaimed }
+        _quests.value = claimed + fresh.filter { f -> claimed.none { it.id == f.id } }
+            .take((fresh.size - claimed.size).coerceAtLeast(0))
+    }
+
+    private fun applyQuestProgress() {
+        val updated = QuestEvaluator.apply(_quests.value, questProgress, _telemetryData.value)
+        _quests.value = updated
+        updateActiveQuest(updated)
     }
 
     private suspend fun recordMoisture(telemetry: TelemetryData) {
@@ -558,30 +597,24 @@ class AgriQuestRepositoryImpl(
     override suspend fun claimQuest(questId: String): Boolean = claimMutex.withLock {
         initialized.await()
         checkAndResetMidnightQuests()
-        val questList = _quests.value.toMutableList()
-        val index = questList.indexOfFirst { it.id == questId }
-        if (index != -1) {
-            val quest = questList[index]
-            if (!quest.isClaimed && quest.isClaimable) {
-                val allClaimedBefore = questList.all { it.isClaimed }
-                val claimedQuest = quest.copy(
-                    progress = 1.0f,
-                    isClaimed = true,
-                    isClaimable = false
-                )
-                questList[index] = claimedQuest
-                _quests.value = questList
-                updateActiveQuest(questList)
-
-                dataStore?.saveClaimedQuestId(questId)
-                addXp(quest.xpReward)
-
-                val allClaimedNow = questList.all { it.isClaimed }
-                if (!allClaimedBefore && allClaimedNow) {
-                    incrementStreak()
-                    return true
-                }
-            }
+        // Same lock as sensor updates, so a reading arriving now can't undo the claim.
+        val claimed = questMutex.withLock {
+            val questList = _quests.value.toMutableList()
+            val index = questList.indexOfFirst { it.id == questId }
+            val quest = questList.getOrNull(index)
+            if (quest == null || quest.isClaimed || !quest.isClaimable) return@withLock null
+            val allClaimedBefore = questList.all { it.isClaimed }
+            questList[index] = quest.copy(progress = 1.0f, isClaimed = true, isClaimable = false)
+            _quests.value = questList
+            updateActiveQuest(questList)
+            Triple(quest, allClaimedBefore, questList.all { it.isClaimed })
+        } ?: return false
+        val (quest, allClaimedBefore, allClaimedNow) = claimed
+        dataStore?.saveClaimedQuestId(questId)
+        addXp(quest.xpReward)
+        if (!allClaimedBefore && allClaimedNow) {
+            incrementStreak()
+            return true
         }
         return false
     }
@@ -591,7 +624,11 @@ class AgriQuestRepositoryImpl(
     }
 
     private suspend fun resetQuestsForDate(date: String): List<Quest> {
-        val newDailyQuests = Quest.forDate(date)
+        questMutex.withLock {
+            questProgress = QuestProgressState(date)
+            dataStore?.saveQuestProgress(questProgress)
+        }
+        val newDailyQuests = QuestEvaluator.apply(questsFor(date), questProgress, _telemetryData.value)
         _quests.value = newDailyQuests
         updateActiveQuest(newDailyQuests)
         dataStore?.clearClaimedQuestIds()
@@ -803,9 +840,13 @@ class AgriQuestRepositoryImpl(
         else -> error?.message ?: "The watering request failed."
     }
 
-    /** Called when the ESP32 reports a finished watering; sensor quests use it (see QuestEvaluator). */
-    private fun completeFirstWaterQuest() {
-        lastConfirmedWateringAt = System.currentTimeMillis()
+    /** Called when the ESP32 (or the simulator) confirms a finished watering. */
+    private suspend fun completeFirstWaterQuest() = questMutex.withLock {
+        val today = getTodayDateString()
+        if (questProgress.date != today) questProgress = QuestProgressState(today)
+        questProgress = QuestEvaluator.onWatered(questProgress, System.currentTimeMillis())
+        applyQuestProgress()
+        dataStore?.saveQuestProgress(questProgress)
     }
 
     override fun toggleFanMode() {

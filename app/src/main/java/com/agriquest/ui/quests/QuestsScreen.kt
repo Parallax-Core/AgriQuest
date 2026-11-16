@@ -82,6 +82,10 @@ fun QuestsScreenContent(
                 )
             }
         }
+        AppText(if (uiState.plantSource == com.agriquest.domain.model.PlantSource.ESP32_HARDWARE)
+                "Quests complete only when your ESP32 sensor detects the goal. ${uiState.quests.size} quests today."
+            else "Simulated: quests are checked against simulated readings. Connect your ESP32 to use real ones.",
+            color = AppTextColor, style = MaterialTheme.typography.bodySmall)
         uiState.quests.forEach { quest -> PlantCareQuestCard(quest, onCompleteQuest) }
         GreenThumbPanel(uiState)
         DailyQuizCard(
@@ -146,12 +150,12 @@ private fun AvailableXpBanner(uiState: AgriQuestUiState) {
 private fun PlantCareQuestCard(quest: Quest, onCompleteQuest: (String) -> Unit) {
     val done = quest.isClaimed
     val icon = when {
-        quest.id.contains("water") || quest.id.contains("thirst") -> Icons.Rounded.WaterDrop
+        quest.id.contains("water") || quest.id.contains("moisture") || quest.id.contains("dry") -> Icons.Rounded.WaterDrop
         quest.id.contains("prune") -> Icons.Rounded.ContentCut
         else -> Icons.Rounded.Search
     }
     val iconColor = when {
-        quest.id.contains("water") || quest.id.contains("thirst") -> Color(0xFF2F87AE)
+        quest.id.contains("water") || quest.id.contains("moisture") || quest.id.contains("dry") -> Color(0xFF2F87AE)
         quest.id.contains("prune") -> Color(0xFF8B5237)
         else -> Color(0xFF32651D)
     }
@@ -193,11 +197,15 @@ private fun PlantCareQuestCard(quest: Quest, onCompleteQuest: (String) -> Unit) 
                 } else {
                     Button(
                         onClick = { onCompleteQuest(quest.id) },
+                        enabled = quest.isClaimable,
                         modifier = Modifier.align(Alignment.End).height(30.dp),
                         shape = AppLayout.buttonShape,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF193F4E)),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-                    ) { AppText("Mark Complete", color = Color(0xFFFFF5D9), style = MaterialTheme.typography.labelMedium) }
+                    ) {
+                        AppText(if (quest.isClaimable) "Claim Reward" else "Waiting for sensor",
+                            color = Color(0xFFFFF5D9), style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         }
