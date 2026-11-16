@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         com.agriquest.ui.sound.GameSounds.init(this)
+        com.agriquest.notifications.MissedDayReminder.schedule(this)
         setContent {
             AgriQuestTheme {
                 AppUpdatePrompt()

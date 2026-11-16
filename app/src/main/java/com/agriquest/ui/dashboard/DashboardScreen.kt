@@ -45,6 +45,8 @@ import com.agriquest.ui.theme.*
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import com.agriquest.ui.sound.GameSound
 import com.agriquest.ui.sound.GameSounds
+import com.agriquest.ui.tutorial.Tutorial
+import com.agriquest.ui.tutorial.TutorialOverlay
 import kotlinx.coroutines.launch
 
 /**
@@ -58,6 +60,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     viewModel: AgriQuestViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
     val discoveredDevices by viewModel.discoveredDevices.collectAsStateWithLifecycle()
@@ -72,16 +75,21 @@ fun DashboardScreen(
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             when (event) {
-                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> GameSounds.startAmbient()
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    GameSounds.startAmbient()
+                    com.agriquest.notifications.MissedDayReminder.markPlayed(context)
+                }
                 androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> GameSounds.stopAmbient()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) GameSounds.startAmbient()
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            GameSounds.startAmbient()
+            com.agriquest.notifications.MissedDayReminder.markPlayed(context)
+        }
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer); GameSounds.stopAmbient() }
     }
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -135,6 +143,11 @@ fun DashboardScreen(
             showConnectGate = false
         }
     }
+    // "Congratulations!" for each finished mission or quiz, one at a time.
+    val pendingRewards = remember { androidx.compose.runtime.mutableStateListOf<com.agriquest.domain.model.Reward>() }
+    LaunchedEffect(viewModel) { viewModel.rewards.collect { pendingRewards.add(it) } }
+    pendingRewards.firstOrNull()?.let { reward -> RewardDialog(reward) { pendingRewards.removeAt(0) } }
+
     // First question before the game: how old is the plant? Then the Connect screen.
     val plantAgeConfirmed by viewModel.plantAgeConfirmed.collectAsStateWithLifecycle()
     if (plantAgeConfirmed == false) {
@@ -170,8 +183,17 @@ fun DashboardScreen(
         )
     }
 
+    // Step-by-step tutorial on first play (after the age question and Connect screen); replayable from settings.
+    var tutorialStep by rememberSaveable { mutableIntStateOf(if (Tutorial.isDone(context)) -1 else 0) }
+    val tutorialVisible = tutorialStep >= 0 && plantAgeConfirmed == true && !showConnectGate
+    LaunchedEffect(tutorialStep, tutorialVisible) {
+        if (tutorialVisible) selectedTab = Tutorial.STEPS[tutorialStep].tab
+    }
+    val endTutorial = { Tutorial.markDone(context); tutorialStep = -1; selectedTab = 0 }
+
+    Box(modifier) {
     DashboardScreenContent(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         uiState = uiState,
         selectedTab = selectedTab,
         onTabSelected = { selectedTab = it },
@@ -203,8 +225,16 @@ fun DashboardScreen(
         actuators = ActuatorUi(watering = watering, fanOn = fanOn, lightOn = lightOn,
             onFan = { GameSounds.play(GameSound.FAN); viewModel.toggleFan() },
             onLight = { GameSounds.play(GameSound.LIGHT); viewModel.toggleLight() },
-            soundMuted = soundMuted, onToggleSound = { GameSounds.setMuted(!soundMuted) })
+            soundMuted = soundMuted, onToggleSound = { GameSounds.setMuted(!soundMuted) },
+            onReplayTutorial = { tutorialStep = 0 })
     )
+    if (tutorialVisible) TutorialOverlay(
+        step = tutorialStep,
+        onNext = { GameSounds.play(GameSound.TAP); if (tutorialStep == Tutorial.STEPS.lastIndex) endTutorial() else tutorialStep++ },
+        onBack = { if (tutorialStep > 0) tutorialStep-- },
+        onSkip = endTutorial
+    )
+    }
 }
 
 /** State and actions for the Water / Fan / Light buttons on the home scene. */
@@ -215,7 +245,8 @@ data class ActuatorUi(
     val onFan: () -> Unit = {},
     val onLight: () -> Unit = {},
     val soundMuted: Boolean = false,
-    val onToggleSound: () -> Unit = {}
+    val onToggleSound: () -> Unit = {},
+    val onReplayTutorial: () -> Unit = {}
 )
 
 /**
@@ -383,6 +414,7 @@ fun HomeDashboardContent(
                 }
                 if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
                     TextButton(onClick = { showSourceSettings = false; onScanForEsp32() }) { Text("Connect ESP32") }
+                TextButton(onClick = { showSourceSettings = false; actuators.onReplayTutorial() }) { Text("Replay tutorial") }
                 TextButton(onClick = actuators.onToggleSound) {
                     Text(if (actuators.soundMuted) "Sound: Off (tap to turn on)" else "Sound: On (tap to mute)")
                 }

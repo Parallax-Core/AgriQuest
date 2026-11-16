@@ -28,6 +28,8 @@ import com.agriquest.domain.model.MoistureHistoryEntry
 import com.agriquest.domain.model.QuestEvaluator
 import com.agriquest.domain.model.QuestProgressState
 import com.agriquest.domain.model.SensorKind
+import com.agriquest.domain.model.Reward
+import com.agriquest.domain.model.AiUnlock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import com.agriquest.domain.repository.AgriQuestRepository
@@ -606,19 +608,25 @@ class AgriQuestRepositoryImpl(
         awardXp(amount)
     }
 
-    private suspend fun awardXp(amount: Int) = rewardMutex.withLock {
-        if (amount <= 0) return@withLock
+    /** Adds XP up to the daily limit and returns how much was actually added. */
+    private suspend fun awardXp(amount: Int): Int = rewardMutex.withLock {
+        if (amount <= 0) return@withLock 0
         val today = getTodayDateString()
         if (today > xpDate) { xpDate = today; earnedToday = 0 }
-        if (today < xpDate) return@withLock
-        val granted = amount.coerceAtMost(PlantGrowthStage.DAILY_XP_LIMIT - earnedToday)
+        if (today < xpDate) return@withLock 0
+        val granted = amount.coerceAtMost(PlantGrowthStage.DAILY_XP_LIMIT - earnedToday).coerceAtLeast(0)
         val total = (_plantAvatar.value.currentXp.toLong() + granted).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         earnedToday += granted
         dataStore?.saveXpLedger(today, earnedToday, total)
         updateAvatarProgression(total)
         dataStore?.saveUserProgression(_plantAvatar.value.levelInt, total, _plantAvatar.value.growthStage)
         dataStore?.markForSync()
+        granted
     }
+
+    /** Finished missions and quizzes, for the "Congratulations!" dialog. */
+    private val _rewards = kotlinx.coroutines.flow.MutableSharedFlow<Reward>(extraBufferCapacity = 8)
+    val rewards: kotlinx.coroutines.flow.SharedFlow<Reward> = _rewards
 
     override suspend fun claimQuest(questId: String): Boolean = claimMutex.withLock {
         initialized.await()
@@ -637,12 +645,12 @@ class AgriQuestRepositoryImpl(
         } ?: return false
         val (quest, allClaimedBefore, allClaimedNow) = claimed
         dataStore?.saveClaimedQuestId(questId)
-        addXp(quest.xpReward)
-        if (!allClaimedBefore && allClaimedNow) {
-            incrementStreak()
-            return true
-        }
-        return false
+        val granted = awardXp(quest.xpReward)
+        val allDone = !allClaimedBefore && allClaimedNow
+        if (allDone) incrementStreak()
+        _rewards.tryEmit(Reward(quest.title, granted, quest.xpReward,
+            if (allDone) Reward.Kind.ALL_QUESTS else Reward.Kind.QUEST))
+        return allDone
     }
 
     override suspend fun resetDailyQuests(): List<Quest> {
@@ -950,11 +958,11 @@ class AgriQuestRepositoryImpl(
     private suspend fun requireAiAccess() {
         val days = accountApi?.aiLoginDays() ?: 0
         _loginDays.value = days
-        check(days >= 7) { "Log in for 7 days to unlock" }
+        check(days >= AiUnlock.REQUIRED_LOGIN_DAYS) { "Log in for ${AiUnlock.REQUIRED_LOGIN_DAYS} days to unlock" }
     }
 
     override suspend fun wakeAiServer(): Boolean {
-        if (_loginDays.value < 7) return false
+        if (_loginDays.value < AiUnlock.REQUIRED_LOGIN_DAYS) return false
         requireAiAccess()
         return leafDetector.wake()
     }
@@ -996,7 +1004,8 @@ class AgriQuestRepositoryImpl(
         _isQuizCompletedToday.value = true
 
         if (isCorrect) {
-            addXp(question.xpReward)
+            val granted = awardXp(question.xpReward)
+            _rewards.tryEmit(Reward("Daily Quiz", granted, question.xpReward, Reward.Kind.QUIZ))
         }
         dataStore?.markForSync()
         return isCorrect

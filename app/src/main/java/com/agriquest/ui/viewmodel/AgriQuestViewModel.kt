@@ -60,6 +60,10 @@ class AgriQuestViewModel(
             .map { devices -> devices.map { DiscoveredBleDevice(it.deviceName, it.macAddress, it.serviceUuid, it.rssi) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Finished missions and quizzes, shown as a "Congratulations!" dialog. */
+    val rewards: Flow<com.agriquest.domain.model.Reward> =
+        (repository as? AgriQuestRepositoryImpl)?.rewards ?: kotlinx.coroutines.flow.emptyFlow()
+
     /** null while loading, false until the player has entered the plant's age. */
     val plantAgeConfirmed: StateFlow<Boolean?> =
         (repository as? AgriQuestRepositoryImpl)?.plantAgeConfirmed ?: MutableStateFlow(true)
@@ -272,10 +276,9 @@ class AgriQuestViewModel(
                 val allCompleted = repository.claimQuest(questId)
                 val updatedPlant = repository.plantAvatar.value
                 val newStreak = updatedPlant.streakDays
+                // The quest itself is celebrated by the Congratulations dialog (see rewards).
                 if (allCompleted) {
-                    _notificationEvents.emit("🎉 All Daily Quests Completed! Care Streak: $newStreak / 7 Days 🔥")
-                } else {
-                    _notificationEvents.emit("🎉 Quest Completed! +${quest.xpReward} XP awarded!")
+                    _notificationEvents.emit("All daily quests done! Care streak: $newStreak / 7 days 🔥")
                 }
             }
         }
@@ -473,9 +476,7 @@ class AgriQuestViewModel(
     suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean {
         if (repository.isQuizCompletedToday.value) return false
         val isCorrect = repository.submitQuizAnswer(selectedOptionIndex)
-        if (isCorrect) {
-            _notificationEvents.emit("🎉 Correct! +10 XP Awarded!")
-        }
+        // A correct answer is celebrated by the Congratulations dialog (see rewards).
         return isCorrect
     }
 

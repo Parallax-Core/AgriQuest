@@ -35,7 +35,11 @@ data class AgriQuestUiState(
     val isLoading: Boolean = false,
     val loginDays: Int = 0
 ) {
-    val isAiUnlocked: Boolean get() = loginDays >= 7
+    val isAiUnlocked: Boolean get() = loginDays >= com.agriquest.domain.model.AiUnlock.REQUIRED_LOGIN_DAYS
+
+    /** Days of login left before the AI Leaf Detector unlocks (0 when unlocked). */
+    val aiDaysRemaining: Int
+        get() = (com.agriquest.domain.model.AiUnlock.REQUIRED_LOGIN_DAYS - loginDays).coerceAtLeast(0)
 
     /** Number of unlocked achievements. */
     val unlockedAchievementsCount: Int
