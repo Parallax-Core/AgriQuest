@@ -20,6 +20,7 @@ import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.CommandStatus
 import com.agriquest.domain.model.WateringStatus
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -90,26 +91,49 @@ class AgriQuestViewModel(
         }
     }
 
-    // In-game Fan and Light. The ESP32 only supports the pump for now, so on hardware these are
-    // shown in the game only (the player is told so).
+    // Fan and Light. On ESP32 hardware each tap sends a command, and fanOn/lightOn (which drive the
+    // animation) change only after the ESP32 confirms it switched. In emulated mode they switch at once.
     private val _fanOn = MutableStateFlow(false)
     val fanOn: StateFlow<Boolean> = _fanOn.asStateFlow()
     private val _lightOn = MutableStateFlow(false)
     val lightOn: StateFlow<Boolean> = _lightOn.asStateFlow()
+    /** Actuators ("fan", "light") with a command still waiting for the ESP32. */
+    private val _actuatorsWaiting = MutableStateFlow<Set<String>>(emptySet())
+    val actuatorsWaiting: StateFlow<Set<String>> = _actuatorsWaiting.asStateFlow()
+    private val autoOffJobs = mutableMapOf<String, Job>()
 
-    fun toggleFan() {
-        _fanOn.value = !_fanOn.value
-        hardwareOnlyPumpNotice("Fan")
+    fun toggleFan() = switchActuator("fan", _fanOn)
+
+    fun toggleLight() = switchActuator("light", _lightOn)
+
+    private fun switchActuator(actuator: String, state: MutableStateFlow<Boolean>) {
+        if (actuator in _actuatorsWaiting.value) return   // one command at a time per actuator
+        val turnOn = !state.value
+        _actuatorsWaiting.update { it + actuator }
+        viewModelScope.launch {
+            try {
+                repository.switchActuator(actuator, if (turnOn) ACTUATOR_ON_SECONDS else 0).collect { status ->
+                    when (status.phase) {
+                        CommandStatus.Phase.DONE -> {
+                            state.value = turnOn
+                            scheduleAutoOff(actuator, state, turnOn)
+                        }
+                        CommandStatus.Phase.FAILED -> _notificationEvents.emit(status.message)
+                        else -> Unit
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { _notificationEvents.emit(e.message ?: "The command could not be sent.") }
+            finally { _actuatorsWaiting.update { it - actuator } }
+        }
     }
 
-    fun toggleLight() {
-        _lightOn.value = !_lightOn.value
-        hardwareOnlyPumpNotice("Light")
-    }
-
-    private fun hardwareOnlyPumpNotice(actuator: String) {
-        if (uiState.value.plantSource == PlantSource.ESP32_HARDWARE) viewModelScope.launch {
-            _notificationEvents.emit("$actuator is shown in the game only. ESP32 support for the $actuator is coming soon.")
+    /** The ESP32 switches a timed command off by itself, so the animation stops at the same time. */
+    private fun scheduleAutoOff(actuator: String, state: MutableStateFlow<Boolean>, on: Boolean) {
+        autoOffJobs.remove(actuator)?.cancel()
+        if (on) autoOffJobs[actuator] = viewModelScope.launch {
+            delay(ACTUATOR_ON_SECONDS * 1000L)
+            state.value = false
         }
     }
 
@@ -508,5 +532,8 @@ class AgriQuestViewModel(
 
         /** The dry-soil alert fires again only after moisture has recovered to this level. */
         const val DRY_ALERT_REARM_PERCENT = 50f
+
+        /** How long a Fan/Light "on" lasts before the ESP32 switches it off by itself (4 h). */
+        const val ACTUATOR_ON_SECONDS = 4 * 60 * 60
     }
 }

@@ -23,6 +23,7 @@ import com.agriquest.domain.model.PlantGrowthStage
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.CommandStatus
 import com.agriquest.domain.model.WateringStatus
 import com.agriquest.domain.model.MoistureHistoryEntry
 import com.agriquest.domain.model.QuestEvaluator
@@ -77,6 +78,8 @@ class AgriQuestRepositoryImpl(
     companion object {
         /** Ages accepted by "How many days old is your plant?". */
         const val MAX_PLANT_AGE_DAYS = 150
+        /** A Fan/Light "off" is sent as a 1-second command; the firmware switches off for <= 1 s. */
+        const val ACTUATOR_OFF_SECONDS = 1
 
         suspend fun forAccount(context: Context, session: AuthSession): AgriQuestRepositoryImpl {
             val store = AgriQuestDataStore(context.applicationContext, session.userId)
@@ -892,6 +895,57 @@ class AgriQuestRepositoryImpl(
         }
     }
 
+    override fun switchActuator(actuator: String, onSeconds: Int): Flow<CommandStatus> = flow {
+        val api = accountApi
+        if (_plantSource.value != PlantSource.ESP32_HARDWARE || api == null) {
+            emit(CommandStatus(CommandStatus.Phase.DONE, ""))   // simulation: switches at once
+            return@flow
+        }
+        val name = actuator.replaceFirstChar { it.uppercase() }
+        val turningOn = onSeconds > 0
+        emit(CommandStatus(CommandStatus.Phase.SENDING, "Sending to the ESP32..."))
+        val activePlant = plantId
+        val binding = if (activePlant == null) null
+            else attempt { monitoringBinding ?: api.monitoringBinding(activePlant) }.getOrNull()
+        if (binding == null) {
+            emit(CommandStatus(CommandStatus.Phase.FAILED, "No ESP32 is paired with this plant yet."))
+            return@flow
+        }
+        // duration_s must be at least 1, so "off" is sent as a 1-second command (the firmware treats <= 1 s as off).
+        val sent = attempt { api.requestCommand(binding, actuator, if (turningOn) onSeconds else ACTUATOR_OFF_SECONDS) }
+        val commandId = sent.getOrNull()
+        if (commandId == null) {
+            emit(CommandStatus(CommandStatus.Phase.FAILED, friendlyError(sent.exceptionOrNull())))
+            return@flow
+        }
+
+        emit(CommandStatus(CommandStatus.Phase.WAITING, "Waiting for the ESP32..."))
+        val startedAt = System.currentTimeMillis()
+        while (true) {
+            delay(1_000)
+            val elapsed = System.currentTimeMillis() - startedAt
+            val (status, reason) = attempt { api.commandStatus(commandId) }.getOrNull() ?: ("unknown" to null)
+            when {
+                // The ESP32 reports "done" right after it switches the relay: that is the confirmation.
+                status == "done" -> {
+                    emit(CommandStatus(CommandStatus.Phase.DONE, "$name ${if (turningOn) "on" else "off"}."))
+                    return@flow
+                }
+                status == "failed" || status == "expired" || status == "rejected" -> {
+                    emit(CommandStatus(CommandStatus.Phase.FAILED, reason
+                        ?: if (status == "expired") "The ESP32 didn't pick up the $actuator command. Is it on and online?"
+                           else "The $actuator didn't switch."))
+                    return@flow
+                }
+                // The ESP32 checks every 5 s, so no answer within 70 s means it is offline.
+                elapsed > 70_000 -> {
+                    emit(CommandStatus(CommandStatus.Phase.FAILED, "No answer from the ESP32. Check that it is powered and online."))
+                    return@flow
+                }
+            }
+        }
+    }
+
     /** Runs a network call, returning its failure instead of throwing (but never swallowing cancellation). */
     private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
         try { Result.success(block()) } catch (e: CancellationException) { throw e } catch (e: Exception) { Result.failure(e) }
@@ -900,8 +954,8 @@ class AgriQuestRepositoryImpl(
         error is java.net.UnknownHostException || error is java.net.ConnectException ||
             error is java.net.SocketTimeoutException -> "Can't reach the server. Check your internet connection."
         error?.message.isNullOrBlank() || error?.message?.startsWith("Account sync failed") == true ->
-            "The server refused the watering request. Try again in a moment."
-        else -> error?.message ?: "The watering request failed."
+            "The server refused the request. Try again in a moment."
+        else -> error?.message ?: "The request failed."
     }
 
     /** Called when the ESP32 (or the simulator) confirms a finished watering. */

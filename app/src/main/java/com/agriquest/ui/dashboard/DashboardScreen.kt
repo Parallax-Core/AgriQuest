@@ -67,10 +67,14 @@ fun DashboardScreen(
     val wateringStatus by viewModel.wateringStatus.collectAsStateWithLifecycle()
     val fanOn by viewModel.fanOn.collectAsStateWithLifecycle()
     val lightOn by viewModel.lightOn.collectAsStateWithLifecycle()
+    val actuatorsWaiting by viewModel.actuatorsWaiting.collectAsStateWithLifecycle()
     val soundMuted by GameSounds.muted.collectAsStateWithLifecycle()
     val wardrobe by viewModel.wardrobe.collectAsStateWithLifecycle()
     val watering = wateringStatus?.phase == WateringStatus.Phase.RUNNING || uiState.actuator.isPumpActive
     LaunchedEffect(watering) { if (watering) GameSounds.play(GameSound.WATER) }
+    // Fan and Light sounds play when the ESP32 confirms (or at once in emulated mode), with the animation.
+    LaunchedEffect(fanOn) { if (fanOn) GameSounds.play(GameSound.FAN) }
+    LaunchedEffect(lightOn) { if (lightOn) GameSounds.play(GameSound.LIGHT) }
     // Quiet garden ambience while the game is on screen.
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
@@ -224,8 +228,9 @@ fun DashboardScreen(
         onWaterPlant = { GameSounds.play(GameSound.TAP); viewModel.waterPlant() },
         snackbarHostState = snackbarHostState,
         actuators = ActuatorUi(watering = watering, fanOn = fanOn, lightOn = lightOn,
-            onFan = { GameSounds.play(GameSound.FAN); viewModel.toggleFan() },
-            onLight = { GameSounds.play(GameSound.LIGHT); viewModel.toggleLight() },
+            fanWaiting = "fan" in actuatorsWaiting, lightWaiting = "light" in actuatorsWaiting,
+            onFan = { GameSounds.play(GameSound.TAP); viewModel.toggleFan() },
+            onLight = { GameSounds.play(GameSound.TAP); viewModel.toggleLight() },
             soundMuted = soundMuted, onToggleSound = { GameSounds.setMuted(!soundMuted) },
             onReplayTutorial = { tutorialStep = 0 },
             wardrobe = wardrobe,
@@ -246,6 +251,8 @@ data class ActuatorUi(
     val watering: Boolean = false,
     val fanOn: Boolean = false,
     val lightOn: Boolean = false,
+    val fanWaiting: Boolean = false,
+    val lightWaiting: Boolean = false,
     val onFan: () -> Unit = {},
     val onLight: () -> Unit = {},
     val soundMuted: Boolean = false,
@@ -388,8 +395,9 @@ fun HomeDashboardContent(
         ActuatorBar(watering = actuators.watering, fanOn = actuators.fanOn, lightOn = actuators.lightOn,
             canWater = uiState.telemetry.needsWatering, onWater = onWaterPlant, onFan = actuators.onFan,
             onLight = actuators.onLight,
+            fanWaiting = actuators.fanWaiting, lightWaiting = actuators.lightWaiting,
             note = wateringStatus?.message ?: if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
-                "Water runs the real ESP32 pump. Fan and Light are shown in the game only for now." else null)
+                "The buttons control the real ESP32. Each animation starts once the ESP32 confirms." else null)
         PixelPanel {
             PlantLevelBar(uiState)
             HorizontalDivider(color = AppCardBorder)

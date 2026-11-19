@@ -141,14 +141,18 @@ fun BoxScope.PlantScene(dayCount: Int, watering: Boolean, fanOn: Boolean, lightO
 @Composable
 fun ActuatorBar(
     watering: Boolean, fanOn: Boolean, lightOn: Boolean, canWater: Boolean,
-    onWater: () -> Unit, onFan: () -> Unit, onLight: () -> Unit, note: String?
+    onWater: () -> Unit, onFan: () -> Unit, onLight: () -> Unit, note: String?,
+    fanWaiting: Boolean = false, lightWaiting: Boolean = false
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             ActuatorButton("Water", if (watering) "Watering" else if (canWater) "Ready" else "Moist",
                 Icons.Rounded.WaterDrop, watering, Color(0xFF2F87AE), onWater, Modifier.weight(1f))
-            ActuatorButton("Fan", if (fanOn) "On" else "Off", Icons.Rounded.Air, fanOn, Color(0xFF546E7A), onFan, Modifier.weight(1f))
-            ActuatorButton("Light", if (lightOn) "On" else "Off", Icons.Rounded.Lightbulb, lightOn, Color(0xFFE2A72B), onLight, Modifier.weight(1f))
+            // "Waiting..." until the ESP32 confirms; the animation changes only after that.
+            ActuatorButton("Fan", if (fanWaiting) "Waiting..." else if (fanOn) "On" else "Off", Icons.Rounded.Air, fanOn,
+                Color(0xFF546E7A), onFan, Modifier.weight(1f))
+            ActuatorButton("Light", if (lightWaiting) "Waiting..." else if (lightOn) "On" else "Off", Icons.Rounded.Lightbulb, lightOn,
+                Color(0xFFE2A72B), onLight, Modifier.weight(1f))
         }
         if (note != null) Text(note, style = MaterialTheme.typography.labelSmall, color = AppTextColor)
     }
