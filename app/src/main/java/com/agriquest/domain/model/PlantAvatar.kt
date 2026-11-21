@@ -4,7 +4,7 @@ package com.agriquest.domain.model
  * Domain model representing the gamified Plant Avatar.
  *
  * @param name Name of the plant avatar
- * @param title Variety/display title ("Roma Rosso 🍅")
+ * @param title Display title shown on Plant Details ("Lycopersicum")
  * @param level Current level display title ("Lvl. 0 Urban Beginner")
  * @param levelInt Current integer level (0, 1, 2, 3...)
  * @param currentXp Current XP points earned (e.g. 0)
@@ -24,7 +24,7 @@ package com.agriquest.domain.model
  */
 data class PlantAvatar(
     val name: String = "Flora",
-    val title: String = "Roma Rosso 🍅",
+    val title: String = "Lycopersicum",
     val level: String = "Lvl. 0 Urban Beginner",
     val levelInt: Int = 0,
     val currentXp: Int = 0,

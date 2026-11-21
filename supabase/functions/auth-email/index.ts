@@ -1,7 +1,7 @@
 import { Webhook } from "npm:standardwebhooks@1.0.0";
 
 type AuthEmail = {
-  user: { id: string; email: string };
+  user: { id: string; email: string; user_metadata?: { username?: unknown } };
   email_data: { token: string; email_action_type: string };
 };
 
@@ -12,6 +12,28 @@ function required(name: string): string {
     throw new Error("Missing server configuration");
   }
   return value;
+}
+
+// The username the player logs in with. Falls back to the signup metadata; never blocks the email.
+async function loginUsername(user: AuthEmail["user"]): Promise<string | null> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (url && serviceKey) {
+    try {
+      const response = await fetch(url + "/rest/v1/rpc/account_login_username", {
+        method: "POST",
+        headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_user_id: user.id }),
+        signal: AbortSignal.timeout(1000),
+      });
+      if (response.ok) {
+        const name = await response.json();
+        if (typeof name === "string" && name.trim()) return name.trim();
+      }
+    } catch { /* fall through to metadata */ }
+  }
+  const meta = user.user_metadata?.username;
+  return typeof meta === "string" && meta.trim() ? meta.trim() : null;
 }
 
 function failure(status: number, message: string): Response {
@@ -48,8 +70,10 @@ Deno.serve(async (request) => {
     const senderEmail = required("AUTH_SENDER_EMAIL");
     const senderName = Deno.env.get("AUTH_SENDER_NAME") || "AgriQuest";
     const subject = action === "recovery" ? "Reset your AgriQuest password" : "Confirm your AgriQuest email";
+    const username = action === "recovery" ? await loginUsername(event.user) : null;
     const text = action === "recovery"
-      ? `Your AgriQuest password reset code is: ${event.email_data.token}\n\nEnter it in the app to choose a new password. If you did not request this, ignore this email.`
+      ? (username ? `Username: ${username}\n` : "") +
+        `Your AgriQuest password reset code is: ${event.email_data.token}\n\nEnter it in the app to choose a new password. If you did not request this, ignore this email.`
       : `Your AgriQuest email confirmation code is: ${event.email_data.token}\n\nEnter it in the app, then log in with your email and password.`;
     stage = "brevo_delivery";
     const sent = await fetch("https://api.brevo.com/v3/smtp/email", {
