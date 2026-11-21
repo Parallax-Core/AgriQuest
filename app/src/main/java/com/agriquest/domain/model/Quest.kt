@@ -1,95 +1,121 @@
 package com.agriquest.domain.model
 
+/** Which sensor a quest needs. The current ESP32 only measures soil moisture; the others may be missing (NaN). */
+enum class SensorKind { MOISTURE, TEMPERATURE, HUMIDITY, LIGHT;
+
+    companion object {
+        /** Sensors that report a real value in [telemetry]. */
+        fun availableIn(telemetry: TelemetryData): Set<SensorKind> = buildSet {
+            if (telemetry.soilMoisture.isFinite()) add(MOISTURE)
+            if (telemetry.airTemperature.isFinite()) add(TEMPERATURE)
+            if (telemetry.relativeHumidity.isFinite()) add(HUMIDITY)
+            if (telemetry.lightIntensity.isFinite()) add(LIGHT)
+        }
+    }
+}
+
 /**
- * Domain model representing a gamified quest/mission for plant care.
+ * How a quest is completed. Every goal is checked from sensor readings or a confirmed pump run,
+ * never by the player tapping "done".
  *
- * @param id Unique identifier for the quest
- * @param title Title of quest ("Prune Lower Leaves" or "⚡ Thirsty Roots...")
- * @param difficulty Difficulty level ("Easy", "Medium", "Hard")
- * @param progress Quest completion progress ratio (1.0f = 100% complete)
- * @param xpReward XP reward amount on completion (+50 XP)
- * @param subtext Description or subtext details for the quest
- * @param progressText Display text for progress bar (e.g. "2 / 2 leaves", "75% Moisture Goal")
- * @param subtextBadge Subtext badge description
- * @param isClaimed Whether quest reward has been claimed
- * @param isClaimable Whether quest reward can be claimed
+ * @param sensor the sensor the goal needs (null = any reading counts)
+ * @param minStageLevel the earliest growth stage the goal makes sense for
+ * @param isTimed true when [Quest.target] is minutes of readings in the zone
+ */
+enum class QuestGoal(val sensor: SensorKind?, val minStageLevel: Int = 0, val isTimed: Boolean = true) {
+    MOISTURE_ZONE(SensorKind.MOISTURE),
+    STAY_ONLINE(null),
+    WATER_WHEN_DRY(SensorKind.MOISTURE, isTimed = false),
+    RECOVER_FROM_DRY(SensorKind.MOISTURE, isTimed = false),
+    TEMP_ZONE(SensorKind.TEMPERATURE),
+    HUMIDITY_ZONE(SensorKind.HUMIDITY),
+    LIGHT_TIME(SensorKind.LIGHT, minStageLevel = 1),
+}
+
+/**
+ * A daily plant-care quest. It becomes claimable only when the readings show the goal was met.
+ *
+ * @param progress 0..1, from [QuestEvaluator]
+ * @param target minutes needed for timed goals (e.g. 20 minutes in the moisture zone)
+ * @param progressText live status, e.g. "Moisture 64% · 12/20 min"
  */
 data class Quest(
-    val id: String = "quest_thirsty_roots",
-    val title: String = "⚡ Thirsty Roots: Keep soil moisture above 60%",
+    val id: String = "quest_moisture_zone",
+    val title: String = "Keep the Soil in the Comfort Zone",
     val difficulty: String = "Easy",
-    val progress: Float = 1.0f,
-    val xpReward: Int = 50,
-    val subtext: String = "Keep soil moisture above 60%.",
-    val progressText: String = "68% Moisture Goal",
-    val subtextBadge: String = "Unlock Progress: 0/7 Days to AI Diagnostic",
+    val progress: Float = 0f,
+    val xpReward: Int = 30,
+    val subtext: String = "",
+    val progressText: String = "Waiting for sensor readings",
+    val subtextBadge: String = "",
     val isClaimed: Boolean = false,
-    val isClaimable: Boolean = true
+    val isClaimable: Boolean = false,
+    val goal: QuestGoal = QuestGoal.MOISTURE_ZONE,
+    val target: Float = 20f
 ) {
-    /** Helper property returning whether the quest is fully completed. */
     val isCompleted: Boolean
         get() = progress >= 1.0f || isClaimed
 
-    /** Helper property formatting XP reward badge (e.g. "+50 XP"). */
     val xpRewardText: String
         get() = "+$xpReward XP"
 
-    /** Progress percentage as integer 0 - 100 %. */
     val progressPercent: Int
         get() = (progress * 100).toInt().coerceIn(0, 100)
 
     companion object {
-        private fun careQuest(id: String, title: String, xp: Int, description: String) = Quest(
-            id = id,
-            title = title,
-            xpReward = xp,
-            subtext = description,
-            progressText = "Mark when finished"
+        /** Quests per day (the daily quiz is extra: one per day). */
+        const val MIN_DAILY_QUESTS = 3
+        const val MAX_DAILY_QUESTS = 5
+
+        private fun quest(goal: QuestGoal, id: String, title: String, xp: Int, difficulty: String, target: Float, description: String) =
+            Quest(id = id, title = title, xpReward = xp, difficulty = difficulty, subtext = description, goal = goal, target = target)
+
+        val ALL_QUESTS = listOf(
+            quest(QuestGoal.MOISTURE_ZONE, "quest_moisture_zone", "Keep the Soil in the Comfort Zone", 30, "Easy", 20f,
+                "Keep soil moisture between 60% and 80% for 20 minutes. The sensor checks it for you."),
+            quest(QuestGoal.STAY_ONLINE, "quest_stay_online", "Keep Your Garden Online", 20, "Easy", 15f,
+                "Keep the sensor sending readings for 15 minutes today."),
+            quest(QuestGoal.WATER_WHEN_DRY, "quest_water_when_dry", "Water Only When Thirsty", 30, "Medium", 1f,
+                "When the soil drops below 45%, water it with the Water button. Completes when the pump run is confirmed."),
+            quest(QuestGoal.RECOVER_FROM_DRY, "quest_recover_from_dry", "Bring the Roots Back", 30, "Medium", 1f,
+                "After the soil gets dry (below 45%), bring it back above 60%."),
+            quest(QuestGoal.TEMP_ZONE, "quest_temp_zone", "Cozy Temperature", 25, "Easy", 30f,
+                "Keep the air between 21 and 28 °C for 30 minutes."),
+            quest(QuestGoal.HUMIDITY_ZONE, "quest_humidity_zone", "Balanced Humidity", 25, "Easy", 30f,
+                "Keep humidity between 50% and 70% for 30 minutes."),
+            quest(QuestGoal.LIGHT_TIME, "quest_light_time", "Sunshine Time", 30, "Medium", 60f,
+                "Give your plant 60 minutes of bright light (10,000 lux or more)."),
         )
 
-        // Safe daily observations; water only when needed.
-        private val DAILY_CORE = listOf(
-            careQuest("quest_review_moisture", "Check Soil and Water Needs", 30,
-                "Check soil and drainage. Water only if needed, never just to earn XP."),
-            careQuest("quest_inspect_plant", "Inspect Plant and Growing Conditions", 30,
-                "Check light, temperature and growth. After emergence, inspect leaves for pests.")
-        )
+        private val CORE_GOALS = setOf(QuestGoal.MOISTURE_ZONE, QuestGoal.STAY_ONLINE)
 
-        // All are safe at every stage, including seeds that have not emerged yet.
-        val ROTATING_QUESTS = listOf(
-            careQuest("quest_record_growth", "Record Today's Growth", 30,
-                "Record emergence, leaves, flowers or fruit in your journal. Note no change if appropriate."),
-            careQuest("quest_check_drainage", "Inspect Pot Drainage", 30,
-                "Check that drainage holes are clear and the pot is not sitting in standing water."),
-            careQuest("quest_review_light", "Review Today's Light Exposure", 30,
-                "Record where the pot receives light and any prolonged shade. If seedlings have emerged, check for leaning."),
-            careQuest("quest_clean_tools", "Check Gardening Tool Cleanliness", 30,
-                "Inspect tools and clean dirty surfaces before the next care session. Note if tools are already clean."),
-            careQuest("quest_check_airflow", "Check Airflow Around the Pot", 30,
-                "Check for blocked ventilation around the growing area, while protecting young seedlings from strong wind."),
-            careQuest("quest_clear_debris", "Inspect the Growing Area", 30,
-                "Look for fallen debris around the pot and clear it if present. Avoid disturbing seeds or roots."),
-            careQuest("quest_compare_growth", "Compare With Your Previous Growth Note", 30,
-                "Compare the plant with an earlier note or photo. If none exists, create a baseline; no visible change is valid."),
-            careQuest("quest_review_temperature", "Review Temperature Changes", 30,
-                "Record the temperature and any recent hot or cool conditions around the pot.")
-        )
-
-        /** Calendar rotation guarantees a different third mission on consecutive days.
-         * UTC is used only to calculate a day index from a local calendar date (DST safe).
-         * Reopening or refreshing on the same date always returns the same mission IDs.
+        /**
+         * Today's quests: always the two core quests, then a date-based rotation of the others that fit the
+         * growth stage and the sensors present. 3 to 5 quests; the same date always gives the same list.
          */
-        fun forDate(date: String): List<Quest> {
+        fun forDate(
+            date: String,
+            stage: PlantGrowthStage = PlantGrowthStage.GERMINATION,
+            sensors: Set<SensorKind> = SensorKind.entries.toSet()
+        ): List<Quest> {
             val parser = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
                 isLenient = false
                 timeZone = java.util.TimeZone.getTimeZone("UTC")
             }
-            val day = requireNotNull(parser.parse(date)).time / 86_400_000L
-            val index = Math.floorMod(day, ROTATING_QUESTS.size.toLong()).toInt()
-            return DAILY_CORE + ROTATING_QUESTS[index]
+            val day = runCatching { requireNotNull(parser.parse(date)).time / 86_400_000L }.getOrDefault(0L)
+            val eligible = ALL_QUESTS.filter { quest ->
+                quest.goal.minStageLevel <= stage.stageLevel && (quest.goal.sensor == null || quest.goal.sensor in sensors)
+            }
+            val core = eligible.filter { it.goal in CORE_GOALS }
+            val others = eligible.filter { it.goal !in CORE_GOALS }
+            val rotated = if (others.isEmpty()) others else {
+                val shift = Math.floorMod(day, others.size.toLong()).toInt()
+                others.drop(shift) + others.take(shift)
+            }
+            val wanted = MIN_DAILY_QUESTS + Math.floorMod(day, (MAX_DAILY_QUESTS - MIN_DAILY_QUESTS + 1).toLong()).toInt()
+            return (core + rotated).take(wanted.coerceAtLeast(MIN_DAILY_QUESTS))
         }
 
-        val QUEST_POOL = DAILY_CORE + ROTATING_QUESTS
         val DAILY_QUESTS: List<Quest>
             get() = forDate(java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()))
         val DEFAULT_QUESTS: List<Quest> get() = DAILY_QUESTS

@@ -76,7 +76,10 @@ fun AwardsScreenContent(
     selectedTab: Int = 4,
     onTabSelected: (Int) -> Unit = {},
     onResetStreak: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    wardrobe: com.agriquest.domain.model.Wardrobe = com.agriquest.domain.model.Wardrobe(),
+    onBuyOutfit: (String) -> Unit = {},
+    onToggleOutfit: (String) -> Unit = {}
 ) {
     AppScreen(
         modifier = modifier,
@@ -98,8 +101,11 @@ fun AwardsScreenContent(
         QuickStatChipsRow(
             unlockedCountText = "${uiState.unlockedAchievementsCount}/${uiState.totalAchievementsCount}",
             totalXpText = uiState.unlockedXpTotal.toString(),
-            rankText = "#42"
+            rankText = "Lvl ${uiState.plant.levelInt}"
         )
+
+        // Outfit shop: spend points on outfits for the tomato
+        OutfitShopPanel(wardrobe, uiState.plant.currentXp, onBuyOutfit, onToggleOutfit)
 
         // 4. Achievements List Section
         AchievementsListSection(
@@ -284,7 +290,7 @@ private fun QuickStatChipsRow(
         QuickStatCard(
             modifier = Modifier.weight(1f),
             value = rankText,
-            label = "Rank"
+            label = "Level"
         )
     }
 }

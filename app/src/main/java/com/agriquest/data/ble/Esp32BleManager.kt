@@ -363,7 +363,7 @@ class Esp32BleManager(
             }
 
             TelemetryData(
-                soilMoisture = moisture ?: 68.0f,
+                soilMoisture = moisture ?: 26.0f,
                 airTemperature = temp ?: 24.5f,
                 relativeHumidity = humidity ?: 62.0f,
                 lightIntensity = light ?: 14200.0f

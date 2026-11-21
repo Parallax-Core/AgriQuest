@@ -5,6 +5,11 @@ verify_jwt = false
 [functions.username-login]
 verify_jwt = false
 
+# AI leaf assessment: the function itself requires a valid player session (it asks Supabase Auth),
+# like username-login, so it also works with the newer signing keys.
+[functions.assess-leaf]
+verify_jwt = false
+
 [auth.email.template.confirmation]
 subject = "Verify your AgriQuest account"
 content_path = "./supabase/templates/confirmation.html"

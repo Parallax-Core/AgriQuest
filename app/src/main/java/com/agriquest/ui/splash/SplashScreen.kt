@@ -63,6 +63,9 @@ fun SplashScreen(
             contentScale = ContentScale.Crop
         )
 
+        // Falling tomatoes behind the logo
+        FallingTomatoes(Modifier.fillMaxSize())
+
         // 2. Foreground Content Column
         Column(
             modifier = Modifier

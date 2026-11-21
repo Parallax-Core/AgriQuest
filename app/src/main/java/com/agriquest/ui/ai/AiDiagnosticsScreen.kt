@@ -70,9 +70,14 @@ fun AiDiagnosticsScreenContent(
     if (!uiState.isAiUnlocked) {
         AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
             PixelPageHeader("AI Agro-Assistant", "Diagnostics", uiState)
-            AppCard {
-                AppText("Log in for 7 days to unlock")
-                AppText("${uiState.loginDays.coerceIn(0, 7)}/7 days")
+            val required = com.agriquest.domain.model.AiUnlock.REQUIRED_LOGIN_DAYS
+            PixelPanel {
+                PixelHeading("AI Leaf Detector is locked")
+                AppText("Log in on $required different days to unlock the AI Leaf Detector.")
+                AppText(if (uiState.aiDaysRemaining == 1) "Unlocks tomorrow if you log in!"
+                    else "Unlocks in ${uiState.aiDaysRemaining} more login days")
+                PixelProgress(uiState.loginDays.coerceIn(0, required) / required.toFloat())
+                AppText("${uiState.loginDays.coerceIn(0, required)}/$required days")
             }
         }
         return
@@ -182,6 +187,7 @@ fun AiDiagnosticsScreenContent(
                     ScanHistoryRow(history) { result = history; saved = false }
                 }
             }
+            LeafHealthStatsPanel(uiState.recentScans)
         } else {
             val details = ScanPresentation.from(shown)
             LeafScanPreview(details, shown.imagePath, shown.heatmapPath)
@@ -200,7 +206,17 @@ fun AiDiagnosticsScreenContent(
                 PixelHeading("What We Found")
                 Text(details.findings, style = MaterialTheme.typography.bodySmall, color = AppTextColor)
                 PixelHeading("What To Do")
-                details.actions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                val careActions = shown.careActions
+                when {
+                    careActions != null -> {
+                        careActions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                        Text("Care guidance by AI (Gemini). This is guidance, not a confirmed diagnosis.",
+                            style = MaterialTheme.typography.labelSmall, color = AppTextColor)
+                    }
+                    shown.guidanceUnavailable -> Text("AI care guidance is unavailable right now. Try scanning again later.",
+                        style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+                    else -> details.actions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PixelButton("Scan Again", { result = null }, Modifier.weight(1f), color = PixelGreen)
                     PixelButton(if (saved) "✓ Saved" else "+ Add to Journal", {

@@ -1,7 +1,6 @@
 package com.agriquest.ui.dashboard
 
 import android.net.Uri
-import android.widget.Toast
 import android.Manifest
 import android.os.Build
 import android.content.pm.PackageManager
@@ -21,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +43,10 @@ import com.agriquest.ui.state.AgriQuestUiState
 import com.agriquest.ui.state.LeafScanState
 import com.agriquest.ui.theme.*
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
+import com.agriquest.ui.sound.GameSound
+import com.agriquest.ui.sound.GameSounds
+import com.agriquest.ui.tutorial.Tutorial
+import com.agriquest.ui.tutorial.TutorialOverlay
 import kotlinx.coroutines.launch
 
 /**
@@ -56,11 +60,41 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     viewModel: AgriQuestViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val leafScanState by viewModel.leafScanState.collectAsStateWithLifecycle()
     val discoveredDevices by viewModel.discoveredDevices.collectAsStateWithLifecycle()
     val wateringStatus by viewModel.wateringStatus.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val fanOn by viewModel.fanOn.collectAsStateWithLifecycle()
+    val lightOn by viewModel.lightOn.collectAsStateWithLifecycle()
+    val actuatorsWaiting by viewModel.actuatorsWaiting.collectAsStateWithLifecycle()
+    val soundMuted by GameSounds.muted.collectAsStateWithLifecycle()
+    val wardrobe by viewModel.wardrobe.collectAsStateWithLifecycle()
+    val watering = wateringStatus?.phase == WateringStatus.Phase.RUNNING || uiState.actuator.isPumpActive
+    LaunchedEffect(watering) { if (watering) GameSounds.play(GameSound.WATER) }
+    // Fan and Light sounds play when the ESP32 confirms (or at once in emulated mode), with the animation.
+    LaunchedEffect(fanOn) { if (fanOn) GameSounds.play(GameSound.FAN) }
+    LaunchedEffect(lightOn) { if (lightOn) GameSounds.play(GameSound.LIGHT) }
+    // Quiet garden ambience while the game is on screen.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> {
+                    GameSounds.startAmbient()
+                    com.agriquest.notifications.MissedDayReminder.markPlayed(context)
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> GameSounds.stopAmbient()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+            GameSounds.startAmbient()
+            com.agriquest.notifications.MissedDayReminder.markPlayed(context)
+        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer); GameSounds.stopAmbient() }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -99,9 +133,47 @@ fun DashboardScreen(
     // Listen for notification events (e.g., pump triggers, AI diagnostic results, tab status)
     LaunchedEffect(viewModel) {
         viewModel.notificationEvents.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            // One message, one place: the snackbar (a Toast as well showed every message twice).
             snackbarHostState.showSnackbar(message)
         }
+    }
+
+    // "Connect" screen at the start of each game, before the plant info is shown.
+    var showConnectGate by rememberSaveable { mutableStateOf(true) }
+    val usingHardware = uiState.plantSource == PlantSource.ESP32_HARDWARE
+    val hardwareConnected = usingHardware && uiState.connection.status == ConnectionStatus.CONNECTED
+    LaunchedEffect(hardwareConnected) {
+        if (hardwareConnected && showConnectGate) {
+            kotlinx.coroutines.delay(1_500L)
+            showConnectGate = false
+        }
+    }
+    // "Congratulations!" for each finished mission or quiz, one at a time.
+    val pendingRewards = remember { androidx.compose.runtime.mutableStateListOf<com.agriquest.domain.model.Reward>() }
+    LaunchedEffect(viewModel) { viewModel.rewards.collect { pendingRewards.add(it) } }
+    pendingRewards.firstOrNull()?.let { reward -> RewardDialog(reward) { pendingRewards.removeAt(0) } }
+
+    // First question before the game: how old is the plant? Then the Connect screen.
+    val plantAgeConfirmed by viewModel.plantAgeConfirmed.collectAsStateWithLifecycle()
+    if (plantAgeConfirmed == false) {
+        PlantAgeDialog(initialDays = uiState.plant.dayCount,
+            maxDays = com.agriquest.data.repository.AgriQuestRepositoryImpl.MAX_PLANT_AGE_DAYS,
+            onConfirm = { viewModel.confirmPlantAge(it) })
+    } else if (showConnectGate && plantAgeConfirmed == true) {
+        ConnectGateDialog(
+            connection = uiState.connection,
+            usingHardware = usingHardware,
+            onConnectEsp32 = {
+                if (!usingHardware) viewModel.setPlantSource(PlantSource.ESP32_HARDWARE)
+                showEsp32SetupDialog = true
+                startScan()
+            },
+            onPlaySimulation = {
+                viewModel.setPlantSource(PlantSource.EMULATED_OFFLINE)
+                showConnectGate = false
+            },
+            onContinue = { showConnectGate = false }
+        )
     }
 
     if (showEsp32SetupDialog) {
@@ -116,8 +188,17 @@ fun DashboardScreen(
         )
     }
 
+    // Step-by-step tutorial on first play (after the age question and Connect screen); replayable from settings.
+    var tutorialStep by rememberSaveable { mutableIntStateOf(if (Tutorial.isDone(context)) -1 else 0) }
+    val tutorialVisible = tutorialStep >= 0 && plantAgeConfirmed == true && !showConnectGate
+    LaunchedEffect(tutorialStep, tutorialVisible) {
+        if (tutorialVisible) selectedTab = Tutorial.STEPS[tutorialStep].tab
+    }
+    val endTutorial = { Tutorial.markDone(context); tutorialStep = -1; selectedTab = 0 }
+
+    Box(modifier) {
     DashboardScreenContent(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         uiState = uiState,
         selectedTab = selectedTab,
         onTabSelected = { selectedTab = it },
@@ -144,10 +225,43 @@ fun DashboardScreen(
         },
         onNextQuizQuestion = { viewModel.nextQuizQuestion() },
         wateringStatus = wateringStatus,
-        onWaterPlant = { viewModel.waterPlant() },
-        snackbarHostState = snackbarHostState
+        onWaterPlant = { GameSounds.play(GameSound.TAP); viewModel.waterPlant() },
+        snackbarHostState = snackbarHostState,
+        actuators = ActuatorUi(watering = watering, fanOn = fanOn, lightOn = lightOn,
+            fanWaiting = "fan" in actuatorsWaiting, lightWaiting = "light" in actuatorsWaiting,
+            onFan = { GameSounds.play(GameSound.TAP); viewModel.toggleFan() },
+            onLight = { GameSounds.play(GameSound.TAP); viewModel.toggleLight() },
+            soundMuted = soundMuted, onToggleSound = { GameSounds.setMuted(!soundMuted) },
+            onReplayTutorial = { tutorialStep = 0 },
+            wardrobe = wardrobe,
+            onBuyOutfit = { GameSounds.play(GameSound.SUCCESS); viewModel.buyOutfit(it) },
+            onToggleOutfit = { GameSounds.play(GameSound.TAP); viewModel.toggleOutfit(it) })
     )
+    if (tutorialVisible) TutorialOverlay(
+        step = tutorialStep,
+        onNext = { GameSounds.play(GameSound.TAP); if (tutorialStep == Tutorial.STEPS.lastIndex) endTutorial() else tutorialStep++ },
+        onBack = { if (tutorialStep > 0) tutorialStep-- },
+        onSkip = endTutorial
+    )
+    }
 }
+
+/** State and actions for the Water / Fan / Light buttons on the home scene. */
+data class ActuatorUi(
+    val watering: Boolean = false,
+    val fanOn: Boolean = false,
+    val lightOn: Boolean = false,
+    val fanWaiting: Boolean = false,
+    val lightWaiting: Boolean = false,
+    val onFan: () -> Unit = {},
+    val onLight: () -> Unit = {},
+    val soundMuted: Boolean = false,
+    val onToggleSound: () -> Unit = {},
+    val onReplayTutorial: () -> Unit = {},
+    val wardrobe: com.agriquest.domain.model.Wardrobe = com.agriquest.domain.model.Wardrobe(),
+    val onBuyOutfit: (String) -> Unit = {},
+    val onToggleOutfit: (String) -> Unit = {}
+)
 
 /**
  * State-driven screen switcher rendering the active tab content:
@@ -177,7 +291,8 @@ fun DashboardScreenContent(
     onNextQuizQuestion: () -> Unit = {},
     wateringStatus: WateringStatus? = null,
     onWaterPlant: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    actuators: ActuatorUi = ActuatorUi()
 ) {
     when (selectedTab) {
         1 -> PlantDetailsScreenContent(
@@ -219,7 +334,10 @@ fun DashboardScreenContent(
             selectedTab = selectedTab,
             onTabSelected = onTabSelected,
             onResetStreak = onResetStreak,
-            snackbarHostState = snackbarHostState
+            snackbarHostState = snackbarHostState,
+            wardrobe = actuators.wardrobe,
+            onBuyOutfit = actuators.onBuyOutfit,
+            onToggleOutfit = actuators.onToggleOutfit
         )
         else -> HomeDashboardContent(
             modifier = modifier,
@@ -229,7 +347,10 @@ fun DashboardScreenContent(
             onPlantSourceSelected = onPlantSourceSelected,
             onClaimQuest = onClaimQuest,
             onScanForEsp32 = onScanForEsp32,
-            snackbarHostState = snackbarHostState
+            snackbarHostState = snackbarHostState,
+            actuators = actuators,
+            onWaterPlant = onWaterPlant,
+            wateringStatus = wateringStatus
         )
     }
 }
@@ -244,7 +365,10 @@ fun HomeDashboardContent(
     onPlantSourceSelected: (PlantSource) -> Unit = {},
     onClaimQuest: (String) -> Unit = {},
     onScanForEsp32: () -> Unit = {},
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() }
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    actuators: ActuatorUi = ActuatorUi(),
+    onWaterPlant: () -> Unit = {},
+    wateringStatus: WateringStatus? = null
 ) {
     var showSourceSettings by remember { mutableStateOf(false) }
     AppScreen(modifier = modifier, uiState = uiState, selectedTab = selectedTab,
@@ -264,9 +388,16 @@ fun HomeDashboardContent(
                     }
                 }
             }
-            PlantAvatarCanvas(growthStage = uiState.plant.growthStage, size = 245.dp,
-                modifier = Modifier.align(Alignment.BottomCenter))
+            PlantScene(dayCount = uiState.plant.dayCount, watering = actuators.watering,
+                fanOn = actuators.fanOn, lightOn = actuators.lightOn, plantSize = 245.dp,
+                outfits = actuators.wardrobe.equippedOutfits)
         }
+        ActuatorBar(watering = actuators.watering, fanOn = actuators.fanOn, lightOn = actuators.lightOn,
+            canWater = uiState.telemetry.needsWatering, onWater = onWaterPlant, onFan = actuators.onFan,
+            onLight = actuators.onLight,
+            fanWaiting = actuators.fanWaiting, lightWaiting = actuators.lightWaiting,
+            note = wateringStatus?.message ?: if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
+                "The buttons control the real ESP32. Each animation starts once the ESP32 confirms." else null)
         PixelPanel {
             PlantLevelBar(uiState)
             HorizontalDivider(color = AppCardBorder)
@@ -302,6 +433,10 @@ fun HomeDashboardContent(
                 }
                 if (uiState.plantSource == PlantSource.ESP32_HARDWARE)
                     TextButton(onClick = { showSourceSettings = false; onScanForEsp32() }) { Text("Connect ESP32") }
+                TextButton(onClick = { showSourceSettings = false; actuators.onReplayTutorial() }) { Text("Replay tutorial") }
+                TextButton(onClick = actuators.onToggleSound) {
+                    Text(if (actuators.soundMuted) "Sound: Off (tap to turn on)" else "Sound: On (tap to mute)")
+                }
             }
         },
         confirmButton = { TextButton({ showSourceSettings = false }) { Text("Done") } }

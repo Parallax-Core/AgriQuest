@@ -35,7 +35,11 @@ data class AgriQuestUiState(
     val isLoading: Boolean = false,
     val loginDays: Int = 0
 ) {
-    val isAiUnlocked: Boolean get() = loginDays >= 7
+    val isAiUnlocked: Boolean get() = loginDays >= com.agriquest.domain.model.AiUnlock.REQUIRED_LOGIN_DAYS
+
+    /** Days of login left before the AI Leaf Detector unlocks (0 when unlocked). */
+    val aiDaysRemaining: Int
+        get() = (com.agriquest.domain.model.AiUnlock.REQUIRED_LOGIN_DAYS - loginDays).coerceAtLeast(0)
 
     /** Number of unlocked achievements. */
     val unlockedAchievementsCount: Int
@@ -50,7 +54,7 @@ data class AgriQuestUiState(
         get() = achievements.filter { it.isUnlocked }.sumOf { it.xpReward }
 
     /** Exposes plant health percentage (e.g. 92%). */
-    val plantHealthPercent: Int
+    val plantHealthPercent: Int?
         get() = plant.healthPercent
 
     /** Exposes plant day count (e.g. Day 47). */
@@ -79,9 +83,9 @@ data class AgriQuestUiState(
     val activeMoodles: List<PlantMoodle>
         get() {
             val list = mutableListOf<PlantMoodle>()
-            if (telemetry.soilMoisture < 15.0f) {
+            if (telemetry.soilMoisture < 10.0f) {
                 list.add(PlantMoodle.WILTING)
-            } else if (telemetry.soilMoisture < 30.0f) {
+            } else if (telemetry.soilMoisture < 22.0f) {
                 list.add(PlantMoodle.THIRSTY)
             }
 
@@ -95,7 +99,7 @@ data class AgriQuestUiState(
                 list.add(PlantMoodle.HEAT_STRESSED)
             }
 
-            if (telemetry.soilMoisture in 60.0f..80.0f && telemetry.airTemperature in 22.0f..28.0f) {
+            if (telemetry.soilMoisture >= 22.0f && telemetry.airTemperature in 22.0f..28.0f) {
                 list.add(PlantMoodle.THRIVING)
             }
 

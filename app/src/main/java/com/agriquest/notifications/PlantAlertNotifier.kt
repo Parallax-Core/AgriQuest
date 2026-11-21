@@ -56,6 +56,42 @@ object PlantAlertNotifier {
         }
     }
 
+    private const val REMINDER_CHANNEL_ID = "play_reminders"
+    private const val MISSED_DAY_ID = 1002
+
+    /** "Your tomato misses you!" Returns true if it was shown. */
+    fun showMissedDay(context: Context, daysAway: Int): Boolean {
+        if (!canNotify(context)) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(REMINDER_CHANNEL_ID, "Play reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Reminds you to check your plant if you haven't played for a day"
+            }
+            context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+        }
+        val openApp = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val tapAction = openApp?.let {
+            PendingIntent.getActivity(context, 1, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+        val text = if (daysAway <= 1) "You haven't played today. Your quests and quiz are waiting!"
+            else "You've been away for $daysAway days. Come back and check your plant!"
+        val notification = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_water_drop)
+            .setContentTitle("Your tomato misses you! 🍅")
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .apply { if (tapAction != null) setContentIntent(tapAction) }
+            .build()
+        return try {
+            NotificationManagerCompat.from(context).notify(MISSED_DAY_ID, notification)
+            true
+        } catch (e: SecurityException) {
+            false
+        }
+    }
+
     private fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(CHANNEL_ID, "Plant alerts", NotificationManager.IMPORTANCE_DEFAULT).apply {

@@ -18,6 +18,10 @@ import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.TelemetryData
 import com.agriquest.domain.model.AccountPlantProgress
 import com.agriquest.domain.model.AiScanResult
+import com.agriquest.domain.model.QuestGoal
+import com.agriquest.domain.model.OutfitSlot
+import com.agriquest.domain.model.Wardrobe
+import com.agriquest.domain.model.QuestProgressState
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
 import org.json.JSONObject
@@ -56,6 +60,12 @@ class AgriQuestDataStore(
         private val KEY_REVISION = longPreferencesKey("cloud_revision")
         private val KEY_DIRTY = booleanPreferencesKey("cloud_dirty")
         private val KEY_SCANS = stringPreferencesKey("recent_scans")
+        private val KEY_MOISTURE_DAYS = stringPreferencesKey("moisture_daily_history")
+        private val KEY_QUEST_PROGRESS = stringPreferencesKey("quest_sensor_progress")
+        private val KEY_AGE_CONFIRMED = booleanPreferencesKey("plant_age_confirmed")
+        private val KEY_WARDROBE = stringPreferencesKey("outfit_wardrobe")
+        /** Days of soil-moisture history kept for the Moisture History chart. */
+        const val MOISTURE_HISTORY_DAYS = 7
     }
 
     val cloudDirtyFlow = dataStore.data.map { it[KEY_DIRTY] ?: false }
@@ -68,9 +78,78 @@ class AgriQuestDataStore(
                     it.getString("confidence"), it.optBoolean("healthy", true),
                     it.optString("path").takeIf(String::isNotBlank), it.optBoolean("low"),
                     it.optString("pathogen").takeIf(String::isNotBlank),
-                    it.optString("heatmap").takeIf(String::isNotBlank))
+                    it.optString("heatmap").takeIf(String::isNotBlank),
+                    it.optJSONArray("actions")?.let { a -> (0 until a.length()).map { i -> a.optString(i) } },
+                    it.optBoolean("noGuidance"))
             } }
         }.getOrDefault(emptyList())
+    }
+
+    /** Latest soil moisture per calendar day ("yyyy-MM-dd" to percent), oldest first. */
+    val moistureDaysFlow: Flow<List<Pair<String, Float>>> = dataStore.data.map { preferences ->
+        runCatching {
+            val json = JSONObject(preferences[KEY_MOISTURE_DAYS] ?: "{}")
+            json.keys().asSequence().map { it to json.getDouble(it).toFloat() }.sortedBy { it.first }.toList()
+        }.getOrDefault(emptyList())
+    }
+
+    /** Stores today's reading (one value per day, newest wins) and keeps the last [MOISTURE_HISTORY_DAYS] days. */
+    suspend fun recordMoisture(date: String, percent: Float) {
+        if (!percent.isFinite()) return
+        dataStore.edit { p ->
+            val json = runCatching { JSONObject(p[KEY_MOISTURE_DAYS] ?: "{}") }.getOrDefault(JSONObject())
+            json.put(date, percent.toDouble())
+            val keep = json.keys().asSequence().toList().sorted().takeLast(MOISTURE_HISTORY_DAYS).toSet()
+            json.keys().asSequence().toList().filter { it !in keep }.forEach { json.remove(it) }
+            p[KEY_MOISTURE_DAYS] = json.toString()
+        }
+    }
+
+    /** Bought and worn outfits and points spent. Stored on this phone only. */
+    val wardrobeFlow: Flow<Wardrobe> = dataStore.data.map { preferences ->
+        runCatching {
+            val json = JSONObject(preferences[KEY_WARDROBE] ?: "{}")
+            val owned = json.optJSONArray("owned")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
+            val equippedJson = json.optJSONObject("equipped") ?: JSONObject()
+            val equipped = OutfitSlot.entries.mapNotNull { slot ->
+                equippedJson.optString(slot.name).takeIf { it.isNotBlank() && it in owned }?.let { slot to it }
+            }.toMap()
+            Wardrobe(owned, equipped, json.optInt("spent"))
+        }.getOrDefault(Wardrobe())
+    }
+
+    suspend fun saveWardrobe(wardrobe: Wardrobe) {
+        val equipped = JSONObject()
+        wardrobe.equipped.forEach { (slot, id) -> equipped.put(slot.name, id) }
+        val json = JSONObject().put("owned", JSONArray(wardrobe.owned.toList())).put("equipped", equipped)
+            .put("spent", wardrobe.spentPoints)
+        dataStore.edit { it[KEY_WARDROBE] = json.toString() }
+    }
+
+    /** True once the player has told the app how old the plant is. */
+    val plantAgeConfirmedFlow: Flow<Boolean> = dataStore.data.map { it[KEY_AGE_CONFIRMED] ?: false }
+    suspend fun savePlantAgeConfirmed() { dataStore.edit { it[KEY_AGE_CONFIRMED] = true } }
+
+    /** Today's sensor quest progress (null if never saved or unreadable). */
+    val questProgressFlow: Flow<QuestProgressState?> = dataStore.data.map { preferences ->
+        val raw = preferences[KEY_QUEST_PROGRESS] ?: return@map null
+        runCatching {
+            val json = JSONObject(raw)
+            val minutesJson = json.optJSONObject("minutes") ?: JSONObject()
+            val minutes = QuestGoal.entries.mapNotNull { goal ->
+                if (minutesJson.has(goal.name)) goal to minutesJson.getDouble(goal.name).toFloat() else null
+            }.toMap()
+            QuestProgressState(json.getString("date"), minutes, json.optLong("last"),
+                json.optBoolean("dry"), json.optBoolean("recovered"), json.optLong("watered"))
+        }.getOrNull()
+    }
+
+    suspend fun saveQuestProgress(state: QuestProgressState) {
+        val minutes = JSONObject()
+        state.minutes.forEach { (goal, value) -> minutes.put(goal.name, value.toDouble()) }
+        val json = JSONObject().put("date", state.date).put("minutes", minutes).put("last", state.lastReadingAt)
+            .put("dry", state.sawDry).put("recovered", state.recovered).put("watered", state.wateredAt)
+        dataStore.edit { it[KEY_QUEST_PROGRESS] = json.toString() }
     }
 
     suspend fun saveScans(scans: List<AiScanResult>) {
@@ -78,7 +157,9 @@ class AgriQuestDataStore(
         scans.forEach { json.put(JSONObject().put("id", it.id).put("title", it.title)
             .put("subtext", it.subtext).put("confidence", it.confidence).put("healthy", it.isHealthy)
             .put("path", it.imagePath.orEmpty()).put("low", it.lowConfidence).put("pathogen", it.pathogen.orEmpty())
-            .put("heatmap", it.heatmapPath.orEmpty())) }
+            .put("heatmap", it.heatmapPath.orEmpty())
+            .put("actions", it.careActions?.let { a -> JSONArray(a) } ?: JSONObject.NULL)
+            .put("noGuidance", it.guidanceUnavailable)) }
         dataStore.edit { it[KEY_SCANS] = json.toString() }
     }
 

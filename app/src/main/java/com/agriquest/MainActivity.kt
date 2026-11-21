@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import com.agriquest.ui.theme.AppAccentBackground
 import com.agriquest.ui.theme.AppCardBackground
+import com.agriquest.ui.theme.AppTextColor
+import com.agriquest.ui.components.PixelGreen
 import com.agriquest.data.repository.AgriQuestRepositoryImpl
 import com.agriquest.ui.dashboard.DashboardScreen
 import com.agriquest.ui.auth.AuthScreen
@@ -39,6 +41,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        com.agriquest.ui.sound.GameSounds.init(this)
+        com.agriquest.notifications.MissedDayReminder.schedule(this)
         setContent {
             AgriQuestTheme {
                 AppUpdatePrompt()
@@ -71,13 +75,50 @@ private fun AccountDashboard(repository: AgriQuestRepositoryImpl, onSignOut: () 
     DisposableEffect(store) { onDispose { store.clear() } }
     val accountViewModel: AgriQuestViewModel = viewModel(viewModelStoreOwner = owner,
         factory = AgriQuestViewModel.Factory(repository))
+    var confirmingLogout by rememberSaveable { mutableStateOf(false) }
+    if (confirmingLogout) {
+        LogoutConfirmDialog(
+            onYes = { confirmingLogout = false; onSignOut() },
+            onNo = { confirmingLogout = false }
+        )
+    }
     Column(Modifier.fillMaxSize()) {
         Surface(color = AppAccentBackground, contentColor = AppCardBackground) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onSignOut, colors = ButtonDefaults.textButtonColors(contentColor = AppCardBackground)) { Text("Log Out") }
+                TextButton(onClick = { confirmingLogout = true }, colors = ButtonDefaults.textButtonColors(contentColor = AppCardBackground)) { Text("Log Out") }
             }
         }
         DashboardScreen(modifier = Modifier.weight(1f), viewModel = accountViewModel)
     }
 }
+
+/** Asks before logging out. Yes uses the app's pixel green, No the app's tomato red. */
+@Composable
+private fun LogoutConfirmDialog(onYes: () -> Unit, onNo: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onNo,
+        containerColor = AppCardBackground,
+        titleContentColor = AppTextColor,
+        title = {
+            Text("Do you want to\nlog out?", modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        },
+        // Both buttons live in one centered row; AlertDialog would otherwise right-align them.
+        confirmButton = {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                Button(onClick = onNo, colors = ButtonDefaults.buttonColors(
+                    containerColor = LogoutNoRed, contentColor = AppCardBackground)) {
+                    Text("No", style = MaterialTheme.typography.headlineSmall)
+                }
+                Button(onClick = onYes, colors = ButtonDefaults.buttonColors(
+                    containerColor = PixelGreen, contentColor = AppCardBackground)) {
+                    Text("Yes", style = MaterialTheme.typography.headlineSmall)
+                }
+            }
+        }
+    )
+}
+
+// Same red the app uses for the "unhealthy" scan state (ScanPresentation.RED).
+private val LogoutNoRed = androidx.compose.ui.graphics.Color(0xFFB53220)

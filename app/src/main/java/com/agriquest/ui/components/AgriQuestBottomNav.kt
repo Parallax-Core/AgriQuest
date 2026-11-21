@@ -53,7 +53,7 @@ enum class AgriQuestTab(
     PLANT("Plant", Icons.Rounded.LocalFlorist, R.drawable.plant),
     QUESTS("Quests", Icons.AutoMirrored.Rounded.Assignment, R.drawable.quests),
     AI_SCAN("AI", Icons.Rounded.SmartToy, R.drawable.ai),
-    AWARDS("Awards", Icons.Rounded.EmojiEvents)
+    AWARDS("Awards", Icons.Rounded.EmojiEvents, R.drawable.awards)
 }
 
 /**

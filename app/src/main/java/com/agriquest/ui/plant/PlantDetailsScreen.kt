@@ -73,8 +73,11 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     GrowthStat("${uiState.plant.dayCount}", "Days", Modifier.weight(1f))
                     GrowthStat("${uiState.plant.growthStage.stageLevel + 1}", "Stage", Modifier.weight(1f))
-                    GrowthStat("${uiState.plant.healthPercent}%", "Health", Modifier.weight(1f))
+                    GrowthStat(uiState.plant.healthText, "Health", Modifier.weight(1f))
                 }
+                Text(if (uiState.plant.healthPercent == null) "Scan a leaf in the AI tab to measure health."
+                    else "Health is based on ${uiState.plant.healthScanCount} leaf scan(s) from the last 7 days.",
+                    style = MaterialTheme.typography.bodySmall, color = AppTextColor)
             }
         }
     }
@@ -111,7 +114,7 @@ private fun WateringControls(telemetry: TelemetryData, status: WateringStatus?, 
 fun PlantHeroCard(plant: PlantAvatar, modifier: Modifier = Modifier) {
     PixelPanel(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            PlantAvatarCanvas(growthStage = plant.growthStage, size = 98.dp)
+            GrowingTomatoPlant(dayCount = plant.dayCount, size = 98.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -120,15 +123,15 @@ fun PlantHeroCard(plant: PlantAvatar, modifier: Modifier = Modifier) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Plant health", style = MaterialTheme.typography.labelLarge, color = AppTextColor)
-                    Text("${plant.healthPercent}%", style = MaterialTheme.typography.labelMedium, color = PixelGreen)
+                    Text(plant.healthText, style = MaterialTheme.typography.labelMedium, color = PixelGreen)
                 }
-                PixelProgress(plant.healthPercent / 100f, color = Color(0xFF649B32))
+                PixelProgress((plant.healthPercent ?: 0) / 100f, color = Color(0xFF649B32))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Level ${plant.levelInt}", style = MaterialTheme.typography.labelLarge, color = AppTextColor)
                     Text(plant.xpText, style = MaterialTheme.typography.labelSmall, color = AppTextColor)
                 }
                 PixelProgress(plant.xpProgress)
-                Text(if (plant.nextWateringInHours != null) "Healthy · Next watering in ${plant.nextWateringInHours} h" else plant.statusTag,
+                Text(if (plant.nextWateringInHours != null && plant.healthPercent != null) "${plant.statusTag} · Next watering in ${plant.nextWateringInHours} h" else plant.statusTag,
                     style = MaterialTheme.typography.labelSmall, color = AppTextColor)
             }
         }

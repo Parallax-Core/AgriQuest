@@ -12,14 +12,15 @@ package com.agriquest.domain.model
  * moisture); the UI shows "—" for those.
  */
 data class TelemetryData(
-    val soilMoisture: Float = 68.0f,
+    val soilMoisture: Float = 26.0f,
     val airTemperature: Float = 24.5f,
     val relativeHumidity: Float = 62.0f,
     val lightIntensity: Float = 14200.0f
 ) {
     companion object {
-        const val MIN_OPTIMAL_SOIL_MOISTURE = 60.0f
-        const val MAX_OPTIMAL_SOIL_MOISTURE = 80.0f
+        // Soil moisture is estimated VWC (%) from the Nov 2026 calibration; the sensor tops out at 30%.
+        const val MIN_OPTIMAL_SOIL_MOISTURE = 22.0f
+        const val MAX_OPTIMAL_SOIL_MOISTURE = 30.0f
 
         const val MIN_OPTIMAL_AIR_TEMP = 21.0f
         const val MAX_OPTIMAL_AIR_TEMP = 28.0f
@@ -31,7 +32,7 @@ data class TelemetryData(
         const val MAX_OPTIMAL_LIGHT_LUX = 50000.0f
 
         /** Below this soil moisture (%) the app alerts the user and enables the Water Plant button. */
-        const val WATERING_THRESHOLD = 45.0f
+        const val WATERING_THRESHOLD = 22.0f   // paper 3.8.2: lower limit of 22% VWC
     }
 
     /** True when the soil is dry enough to water (below [WATERING_THRESHOLD]). False if there is no reading. */
@@ -46,7 +47,7 @@ data class TelemetryData(
             relativeHumidity.orDefault(defaults.relativeHumidity), lightIntensity.orDefault(defaults.lightIntensity))
     }
 
-    /** Returns whether soil moisture is within optimal range (60-80%). */
+    /** Returns whether soil moisture is within optimal range (22-30% VWC). */
     val isSoilMoistureOptimal: Boolean
         get() = soilMoisture in MIN_OPTIMAL_SOIL_MOISTURE..MAX_OPTIMAL_SOIL_MOISTURE
 

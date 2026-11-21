@@ -20,6 +20,7 @@ import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.CommandStatus
 import com.agriquest.domain.model.WateringStatus
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -59,6 +60,82 @@ class AgriQuestViewModel(
         ((repository as? AgriQuestRepositoryImpl)?.discoveredDevices ?: MutableStateFlow(emptyList()))
             .map { devices -> devices.map { DiscoveredBleDevice(it.deviceName, it.macAddress, it.serviceUuid, it.rssi) } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Outfits bought and worn (points = all XP earned minus points spent). */
+    val wardrobe: StateFlow<com.agriquest.domain.model.Wardrobe> =
+        (repository as? AgriQuestRepositoryImpl)?.wardrobe ?: MutableStateFlow(com.agriquest.domain.model.Wardrobe())
+
+    fun buyOutfit(outfitId: String) {
+        viewModelScope.launch {
+            val message = (repository as? AgriQuestRepositoryImpl)?.buyOutfit(outfitId) ?: "The outfit shop needs an account."
+            _notificationEvents.emit(message)
+        }
+    }
+
+    fun toggleOutfit(outfitId: String) {
+        viewModelScope.launch { (repository as? AgriQuestRepositoryImpl)?.toggleOutfit(outfitId) }
+    }
+
+    /** Finished missions and quizzes, shown as a "Congratulations!" dialog. */
+    val rewards: Flow<com.agriquest.domain.model.Reward> =
+        (repository as? AgriQuestRepositoryImpl)?.rewards ?: kotlinx.coroutines.flow.emptyFlow()
+
+    /** null while loading, false until the player has entered the plant's age. */
+    val plantAgeConfirmed: StateFlow<Boolean?> =
+        (repository as? AgriQuestRepositoryImpl)?.plantAgeConfirmed ?: MutableStateFlow(true)
+
+    fun confirmPlantAge(days: Int) {
+        viewModelScope.launch {
+            val ok = (repository as? AgriQuestRepositoryImpl)?.confirmPlantAge(days) ?: false
+            _notificationEvents.emit(if (ok) "Got it! Your plant is $days day(s) old." else "Enter a number of days from 0 to 150.")
+        }
+    }
+
+    // Fan and Light. On ESP32 hardware each tap sends a command, and fanOn/lightOn (which drive the
+    // animation) change only after the ESP32 confirms it switched. In emulated mode they switch at once.
+    private val _fanOn = MutableStateFlow(false)
+    val fanOn: StateFlow<Boolean> = _fanOn.asStateFlow()
+    private val _lightOn = MutableStateFlow(false)
+    val lightOn: StateFlow<Boolean> = _lightOn.asStateFlow()
+    /** Actuators ("fan", "light") with a command still waiting for the ESP32. */
+    private val _actuatorsWaiting = MutableStateFlow<Set<String>>(emptySet())
+    val actuatorsWaiting: StateFlow<Set<String>> = _actuatorsWaiting.asStateFlow()
+    private val autoOffJobs = mutableMapOf<String, Job>()
+
+    fun toggleFan() = switchActuator("fan", _fanOn)
+
+    fun toggleLight() = switchActuator("light", _lightOn)
+
+    private fun switchActuator(actuator: String, state: MutableStateFlow<Boolean>) {
+        if (actuator in _actuatorsWaiting.value) return   // one command at a time per actuator
+        val turnOn = !state.value
+        _actuatorsWaiting.update { it + actuator }
+        viewModelScope.launch {
+            try {
+                repository.switchActuator(actuator, if (turnOn) ACTUATOR_ON_SECONDS else 0).collect { status ->
+                    when (status.phase) {
+                        CommandStatus.Phase.DONE -> {
+                            state.value = turnOn
+                            scheduleAutoOff(actuator, state, turnOn)
+                        }
+                        CommandStatus.Phase.FAILED -> _notificationEvents.emit(status.message)
+                        else -> Unit
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { _notificationEvents.emit(e.message ?: "The command could not be sent.") }
+            finally { _actuatorsWaiting.update { it - actuator } }
+        }
+    }
+
+    /** The ESP32 switches a timed command off by itself, so the animation stops at the same time. */
+    private fun scheduleAutoOff(actuator: String, state: MutableStateFlow<Boolean>, on: Boolean) {
+        autoOffJobs.remove(actuator)?.cancel()
+        if (on) autoOffJobs[actuator] = viewModelScope.launch {
+            delay(ACTUATOR_ON_SECONDS * 1000L)
+            state.value = false
+        }
+    }
 
     private var pairingJob: Job? = null
     fun connectEsp32Device(macAddress: String, onPaired: () -> Unit = {}) {
@@ -238,10 +315,9 @@ class AgriQuestViewModel(
                 val allCompleted = repository.claimQuest(questId)
                 val updatedPlant = repository.plantAvatar.value
                 val newStreak = updatedPlant.streakDays
+                // The quest itself is celebrated by the Congratulations dialog (see rewards).
                 if (allCompleted) {
-                    _notificationEvents.emit("🎉 All Daily Quests Completed! Care Streak: $newStreak / 7 Days 🔥")
-                } else {
-                    _notificationEvents.emit("🎉 Quest Completed! +${quest.xpReward} XP awarded!")
+                    _notificationEvents.emit("All daily quests done! Care streak: $newStreak / 7 days 🔥")
                 }
             }
         }
@@ -402,7 +478,7 @@ class AgriQuestViewModel(
         viewModelScope.launch {
             val entry = JournalEntry(
                 id = System.currentTimeMillis().toString(),
-                date = "Today",
+                date = java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault()).format(java.util.Date()),
                 note = note,
                 category = category
             )
@@ -439,9 +515,7 @@ class AgriQuestViewModel(
     suspend fun submitQuizAnswer(selectedOptionIndex: Int): Boolean {
         if (repository.isQuizCompletedToday.value) return false
         val isCorrect = repository.submitQuizAnswer(selectedOptionIndex)
-        if (isCorrect) {
-            _notificationEvents.emit("🎉 Correct! +10 XP Awarded!")
-        }
+        // A correct answer is celebrated by the Congratulations dialog (see rewards).
         return isCorrect
     }
 
@@ -457,6 +531,9 @@ class AgriQuestViewModel(
         const val SLOW_SCAN_NOTICE_MS = 6_000L
 
         /** The dry-soil alert fires again only after moisture has recovered to this level. */
-        const val DRY_ALERT_REARM_PERCENT = 50f
+        const val DRY_ALERT_REARM_PERCENT = 25f
+
+        /** How long a Fan/Light "on" lasts before the ESP32 switches it off by itself (4 h). */
+        const val ACTUATOR_ON_SECONDS = 4 * 60 * 60
     }
 }

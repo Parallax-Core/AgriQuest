@@ -11,6 +11,7 @@ import com.agriquest.domain.model.PlantAvatar
 import com.agriquest.domain.model.PlantSource
 import com.agriquest.domain.model.Quest
 import com.agriquest.domain.model.TelemetryData
+import com.agriquest.domain.model.CommandStatus
 import com.agriquest.domain.model.WateringStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -127,6 +128,13 @@ interface AgriQuestRepository {
      * progress until the ESP32 confirms it ran. Emulated mode: runs the simulated pump.
      */
     fun waterPlant(durationSeconds: Int = 5): Flow<WateringStatus>
+
+    /**
+     * The Fan and Light buttons. [actuator] is "fan" or "light"; [onSeconds] = how long to stay on,
+     * 0 = switch off. Live IoT mode: sends the command through Supabase and ends with DONE only once
+     * the ESP32 reports that it switched. Emulated mode: DONE right away.
+     */
+    fun switchActuator(actuator: String, onSeconds: Int): Flow<CommandStatus>
 
     /**
      * Toggles fan mode, cycling through AUTO -> ON -> OFF -> AUTO.

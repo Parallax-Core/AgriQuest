@@ -20,10 +20,11 @@ import java.util.concurrent.TimeUnit
 
 data class PlantMonitoringBinding(val accountId: String, val plantId: String, val deviceId: String)
 data class PlantSensorReading(val telemetry: TelemetryData, val recordedAt: String) {
-    fun isFresh(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    fun isFresh(nowMillis: Long = System.currentTimeMillis(),
+                maxAgeMs: Long = com.agriquest.domain.model.ConnectionState.HEARTBEAT_TIMEOUT_MS): Boolean {
         val normalized = recordedAt.replace(Regex("\\.\\d+(?=Z|[+-])"), "")
         val timestamp = runCatching { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(normalized)?.time }.getOrNull() ?: return false
-        return nowMillis - timestamp in -30_000L..120_000L
+        return nowMillis - timestamp in -30_000L..maxAgeMs
     }
 }
 
