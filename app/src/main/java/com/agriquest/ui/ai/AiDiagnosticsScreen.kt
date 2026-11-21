@@ -206,7 +206,17 @@ fun AiDiagnosticsScreenContent(
                 PixelHeading("What We Found")
                 Text(details.findings, style = MaterialTheme.typography.bodySmall, color = AppTextColor)
                 PixelHeading("What To Do")
-                details.actions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                val careActions = shown.careActions
+                when {
+                    careActions != null -> {
+                        careActions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                        Text("Care guidance by AI (Gemini). This is guidance, not a confirmed diagnosis.",
+                            style = MaterialTheme.typography.labelSmall, color = AppTextColor)
+                    }
+                    shown.guidanceUnavailable -> Text("AI care guidance is unavailable right now. Try scanning again later.",
+                        style = MaterialTheme.typography.bodySmall, color = AppTextColor)
+                    else -> details.actions.forEach { Text("▪ $it", style = MaterialTheme.typography.bodySmall, color = AppTextColor) }
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PixelButton("Scan Again", { result = null }, Modifier.weight(1f), color = PixelGreen)
                     PixelButton(if (saved) "✓ Saved" else "+ Add to Journal", {

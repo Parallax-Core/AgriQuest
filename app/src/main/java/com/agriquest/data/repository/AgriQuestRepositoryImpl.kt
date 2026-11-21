@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.agriquest.data.ble.Esp32BleManager
 import com.agriquest.data.local.AgriQuestDataStore
+import com.agriquest.data.remote.AssessLeafApi
 import com.agriquest.data.remote.LeafDetectorApi
 import com.agriquest.data.remote.LeafPhotoPreparer
 import com.agriquest.data.remote.AuthSession
@@ -1003,8 +1004,9 @@ class AgriQuestRepositoryImpl(
     }
 
     /**
-     * Shrinks the leaf photo, uploads it to the AI Leaf Detector on Render and logs the diagnosis
-     * in Recent Scans. Scanning does not award XP.
+     * Shrinks the leaf photo and sends it to the assess-leaf Edge Function, which runs the model on
+     * Render, asks Gemini for care guidance and saves the scan to the player's history (leaf_scans).
+     * Logs the result in Recent Scans. Scanning does not award XP.
      */
     override suspend fun performCameraScan(photo: Uri): AiScanResult {
         requireAiAccess()
@@ -1013,7 +1015,8 @@ class AgriQuestRepositoryImpl(
         // Kept in the cache so Recent Scans can show the photo; Android clears it when space runs low.
         val savedPhoto = File(context.filesDir, "accounts/${accountId ?: "preview"}/leaf_photos/$id.jpg")
         val jpeg = withContext(Dispatchers.IO) { LeafPhotoPreparer.prepare(context, photo, savedPhoto) }
-        val prediction = leafDetector.predict(jpeg)
+        val assessment = assessLeaf(jpeg)
+        val prediction = assessment.prediction
         val heatmapFile = prediction.heatmapPng?.let { png ->
             runCatching {
                 File(savedPhoto.parentFile, "${id}_heatmap.png").also { file ->
@@ -1031,12 +1034,36 @@ class AgriQuestRepositoryImpl(
             imagePath = savedPhoto.absolutePath,
             lowConfidence = prediction.lowConfidence,
             pathogen = prediction.pathogen,
-            heatmapPath = heatmapFile?.absolutePath
+            heatmapPath = heatmapFile?.absolutePath,
+            careActions = assessment.careActions,
+            guidanceUnavailable = assessment.viaServer && assessment.careActions == null
         )
         _recentScans.value = listOf(newScan) + _recentScans.value
         dataStore?.saveScans(_recentScans.value)
         refreshHealthFromScans()
         return newScan
+    }
+
+    /** Result of one leaf assessment; [viaServer] is false when the Edge Function wasn't used. */
+    private class LeafAssessment(val prediction: LeafDetectorApi.Prediction, val careActions: List<String>?,
+        val viaServer: Boolean)
+
+    /**
+     * Uses the assess-leaf Edge Function when logged in. Until that function is deployed (HTTP 404),
+     * falls back to calling Render directly, with the built-in care tips instead of Gemini's.
+     */
+    private suspend fun assessLeaf(jpeg: ByteArray): LeafAssessment {
+        val api = accountApi
+        val plant = plantId
+        if (api != null && plant != null) {
+            try {
+                val result = AssessLeafApi(api.session).assess(jpeg, plant)
+                return LeafAssessment(result.prediction, result.careActions, viaServer = true)
+            } catch (_: AssessLeafApi.NotDeployedException) {
+                // Not deployed yet: use the direct Render path below.
+            }
+        }
+        return LeafAssessment(leafDetector.predict(jpeg), careActions = null, viaServer = false)
     }
 
     private suspend fun requireAiAccess() {
@@ -1048,6 +1075,14 @@ class AgriQuestRepositoryImpl(
     override suspend fun wakeAiServer(): Boolean {
         if (_loginDays.value < AiUnlock.REQUIRED_LOGIN_DAYS) return false
         requireAiAccess()
+        val api = accountApi
+        if (api != null) {
+            try {
+                return AssessLeafApi(api.session).wake()
+            } catch (_: AssessLeafApi.NotDeployedException) {
+                // Not deployed yet: wake Render directly.
+            }
+        }
         return leafDetector.wake()
     }
 

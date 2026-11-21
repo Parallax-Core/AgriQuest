@@ -10,6 +10,9 @@ package com.agriquest.domain.model
  * @property lowConfidence true when the model is under 50% sure; the app suggests a clearer photo.
  * @property pathogen the organism behind the disease, from the server; null when healthy.
  * @property heatmapPath PNG overlay showing where the model looked (Grad-CAM/CAM); null if none.
+ * @property careActions 3-4 care actions written by Gemini from the assessed condition; null if none.
+ * @property guidanceUnavailable true when the AI service ran but Gemini's guidance was unavailable
+ *   (paper: show the classifier result and mark the guidance as unavailable).
  */
 data class AiScanResult(
     val id: String,
@@ -20,7 +23,9 @@ data class AiScanResult(
     val imagePath: String? = null,
     val lowConfidence: Boolean = false,
     val pathogen: String? = null,
-    val heatmapPath: String? = null
+    val heatmapPath: String? = null,
+    val careActions: List<String>? = null,
+    val guidanceUnavailable: Boolean = false
 ) {
     companion object {
         /** Recent Scans starts empty; entries come from real scans only. */

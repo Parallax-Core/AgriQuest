@@ -78,7 +78,9 @@ class AgriQuestDataStore(
                     it.getString("confidence"), it.optBoolean("healthy", true),
                     it.optString("path").takeIf(String::isNotBlank), it.optBoolean("low"),
                     it.optString("pathogen").takeIf(String::isNotBlank),
-                    it.optString("heatmap").takeIf(String::isNotBlank))
+                    it.optString("heatmap").takeIf(String::isNotBlank),
+                    it.optJSONArray("actions")?.let { a -> (0 until a.length()).map { i -> a.optString(i) } },
+                    it.optBoolean("noGuidance"))
             } }
         }.getOrDefault(emptyList())
     }
@@ -155,7 +157,9 @@ class AgriQuestDataStore(
         scans.forEach { json.put(JSONObject().put("id", it.id).put("title", it.title)
             .put("subtext", it.subtext).put("confidence", it.confidence).put("healthy", it.isHealthy)
             .put("path", it.imagePath.orEmpty()).put("low", it.lowConfidence).put("pathogen", it.pathogen.orEmpty())
-            .put("heatmap", it.heatmapPath.orEmpty())) }
+            .put("heatmap", it.heatmapPath.orEmpty())
+            .put("actions", it.careActions?.let { a -> JSONArray(a) } ?: JSONObject.NULL)
+            .put("noGuidance", it.guidanceUnavailable)) }
         dataStore.edit { it[KEY_SCANS] = json.toString() }
     }
 
