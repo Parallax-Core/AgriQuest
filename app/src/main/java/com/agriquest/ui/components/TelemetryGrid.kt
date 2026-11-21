@@ -25,8 +25,9 @@ private fun Float.statusOr(text: String) = if (isFinite()) text else "No sensor"
 
 private fun TelemetryData.readings() = listOf(
     SensorReading("Soil Moisture", soilMoisture.shown("%"), R.drawable.soil_moisture,
-        if (soilMoisture < 60f) "Too Dry" else if (soilMoisture > 80f) "Too Wet" else "Optimal",
-        soilMoisture in 60f..80f, Color(0xFFDCEBF0)),
+        if (soilMoisture < TelemetryData.MIN_OPTIMAL_SOIL_MOISTURE) "Too Dry"
+        else if (soilMoisture >= TelemetryData.MAX_OPTIMAL_SOIL_MOISTURE) "Wet" else "Optimal",
+        soilMoisture >= TelemetryData.MIN_OPTIMAL_SOIL_MOISTURE, Color(0xFFDCEBF0)),
     SensorReading("Temperature", airTemperature.shown("°C"), when {
         airTemperature < 15f -> R.drawable.temp_cold
         airTemperature > 30f -> R.drawable.temp_high

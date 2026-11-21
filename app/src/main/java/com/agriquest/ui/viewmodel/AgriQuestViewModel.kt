@@ -531,7 +531,7 @@ class AgriQuestViewModel(
         const val SLOW_SCAN_NOTICE_MS = 6_000L
 
         /** The dry-soil alert fires again only after moisture has recovered to this level. */
-        const val DRY_ALERT_REARM_PERCENT = 50f
+        const val DRY_ALERT_REARM_PERCENT = 25f
 
         /** How long a Fan/Light "on" lasts before the ESP32 switches it off by itself (4 h). */
         const val ACTUATOR_ON_SECONDS = 4 * 60 * 60

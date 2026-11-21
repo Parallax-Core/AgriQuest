@@ -24,7 +24,7 @@ data class QuestProgressState(
 object QuestEvaluator {
     /** A gap longer than this between readings is not counted (the sensor was offline). */
     const val MAX_GAP_MS = ConnectionState.HEARTBEAT_TIMEOUT_MS
-    const val RECOVERED_MOISTURE = 60f
+    const val RECOVERED_MOISTURE = 25f
 
     fun onReading(state: QuestProgressState, telemetry: TelemetryData, nowMs: Long): QuestProgressState {
         val gap = if (state.lastReadingAt == 0L) 0L else nowMs - state.lastReadingAt

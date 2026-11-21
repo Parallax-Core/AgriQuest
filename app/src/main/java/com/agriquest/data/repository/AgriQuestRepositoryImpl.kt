@@ -133,7 +133,7 @@ class AgriQuestRepositoryImpl(
 
     private val _telemetryData = MutableStateFlow(
         TelemetryData(
-            soilMoisture = 68.0f,
+            soilMoisture = 26.0f,
             airTemperature = 24.5f,
             relativeHumidity = 62.0f,
             lightIntensity = 14200.0f
@@ -803,7 +803,7 @@ class AgriQuestRepositoryImpl(
             return
         }
 
-        // 1. Restores soil moisture by +15% (capped at 100.0%)
+        // 1. Restores soil moisture by +4% VWC (capped at 30%)
         val updatedTelemetry = simulationEngine.restoreMoistureFromPump(_telemetryData.value)
         _telemetryData.value = updatedTelemetry
         dataStore?.saveTelemetryData(updatedTelemetry)
@@ -819,7 +819,7 @@ class AgriQuestRepositoryImpl(
         }
 
         // 5. Trigger notification/toast callback for activation
-        val startMessage = "💧 Water pump triggered for ${durationSeconds}s! Soil moisture restored by +15% to ${updatedMoisture.toInt()}%."
+        val startMessage = "💧 Water pump triggered for ${durationSeconds}s! Soil moisture restored by +4% to ${updatedMoisture.toInt()}%."
         onNotification(startMessage)
 
         // 6. Countdown timer execution

@@ -25,7 +25,7 @@ class TelemetrySimulationEngine(
      * @return Updated simulated [TelemetryData]
      */
     fun tick(current: TelemetryData): TelemetryData {
-        // Decay soil moisture by ~0.5% to 1.0% per tick down to MIN_SOIL_MOISTURE (40.0%)
+        // Decay soil moisture by ~0.5% to 1.0% per tick down to MIN_SOIL_MOISTURE (15.0%)
         val decayAmount = random.nextDouble(0.5, 1.0).toFloat()
         val nextMoisture = (current.soilMoisture - decayAmount).coerceAtLeast(MIN_SOIL_MOISTURE)
 
@@ -51,13 +51,13 @@ class TelemetrySimulationEngine(
 
     /**
      * Calculates updated telemetry data when pump is triggered.
-     * Restores soil moisture by [restoreAmount] (default +15.0%), capped at 100.0%.
+     * Restores soil moisture by [restoreAmount] (default +4% VWC), capped at the sensor's 30% limit.
      */
     fun restoreMoistureFromPump(
         current: TelemetryData,
         restoreAmount: Float = DEFAULT_PUMP_RESTORE_AMOUNT
     ): TelemetryData {
-        val updatedMoisture = (current.soilMoisture + restoreAmount).coerceAtMost(100.0f)
+        val updatedMoisture = (current.soilMoisture + restoreAmount).coerceAtMost(TelemetryData.MAX_OPTIMAL_SOIL_MOISTURE)
         return current.copy(soilMoisture = roundToSingleDecimal(updatedMoisture))
     }
 
@@ -78,9 +78,9 @@ class TelemetrySimulationEngine(
     }
 
     companion object {
-        const val DEFAULT_PUMP_RESTORE_AMOUNT = 15.0f
+        const val DEFAULT_PUMP_RESTORE_AMOUNT = 4.0f   // about 55 mL into a 1,500 mL pot
 
-        const val MIN_SOIL_MOISTURE = 40.0f
+        const val MIN_SOIL_MOISTURE = 15.0f
         const val MIN_TEMP = 23.5f
         const val MAX_TEMP = 26.0f
         const val MIN_HUMIDITY = 58.0f

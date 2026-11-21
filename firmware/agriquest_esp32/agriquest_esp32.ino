@@ -60,14 +60,16 @@ const bool RELAY_ACTIVE_LOW = true;
 
 const unsigned long READ_INTERVAL_MS = 10000;   // one reading every 10 s
 const unsigned long COMMAND_POLL_MS = 5000;     // check for pump commands every 5 s
-const int MAX_PUMP_SECONDS = 10;                // hard local limit per run
+const int MAX_PUMP_SECONDS = 6;                 // hard local limit per run (about 66 mL at 11 mL/s for a 1,500 mL pot)
 const float TEST_PUMP_GAIN_PER_SECOND = 4.0;
 const uint32_t WATCHDOG_MS = 40000;             // restart automatically if the program freezes this long    // test mode: % moisture added per pump second
 
-// Calibration for the real sensor (raw 0-4095 readings). Replace with your own:
-// hold the sensor in dry air -> SOIL_DRY_RAW; dip it in water up to the line -> SOIL_WET_RAW.
-   const int SOIL_DRY_RAW = 820; // dry
-const int SOIL_WET_RAW = 0;   // your in-water number
+// Soil calibration (Nov 21, 2026): five cups of the pot's soil at 0, 10, 15, 20 and 30% VWC, tap-packed,
+// sensor on 3.3V. Linear fit: VWC = 32.75 - 0.0371 x raw (R^2 = 0.91, RMSE about 3 percentage points).
+// The sensor bottoms out near 30% VWC, so readings are capped at 0-30%.
+const float SOIL_CAL_INTERCEPT = 32.75;
+const float SOIL_CAL_SLOPE = -0.0371;
+const float SOIL_MAX_VWC = 30.0;
 
 // ----------------------------------------------------------------- state
 LiquidCrystal_I2C *lcd = nullptr;
@@ -185,9 +187,9 @@ float readMoisturePercent() {
   return fakeMoisture;
 #else
   int raw = readSoilRaw();
-  Serial.printf("Soil raw value: %d\n", raw);      // use these to calibrate SOIL_DRY_RAW / SOIL_WET_RAW
-  float percent = (float)(SOIL_DRY_RAW - raw) * 100.0 / (SOIL_DRY_RAW - SOIL_WET_RAW);
-  return constrain(percent, 0.0, 100.0);
+  Serial.printf("Soil raw value: %d\n", raw);
+  float vwc = SOIL_CAL_INTERCEPT + SOIL_CAL_SLOPE * raw;   // estimated volumetric water content, %
+  return constrain(vwc, 0.0, SOIL_MAX_VWC);
 #endif
 }
 

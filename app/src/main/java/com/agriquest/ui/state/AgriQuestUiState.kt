@@ -83,9 +83,9 @@ data class AgriQuestUiState(
     val activeMoodles: List<PlantMoodle>
         get() {
             val list = mutableListOf<PlantMoodle>()
-            if (telemetry.soilMoisture < 15.0f) {
+            if (telemetry.soilMoisture < 10.0f) {
                 list.add(PlantMoodle.WILTING)
-            } else if (telemetry.soilMoisture < 30.0f) {
+            } else if (telemetry.soilMoisture < 22.0f) {
                 list.add(PlantMoodle.THIRSTY)
             }
 
@@ -99,7 +99,7 @@ data class AgriQuestUiState(
                 list.add(PlantMoodle.HEAT_STRESSED)
             }
 
-            if (telemetry.soilMoisture in 60.0f..80.0f && telemetry.airTemperature in 22.0f..28.0f) {
+            if (telemetry.soilMoisture >= 22.0f && telemetry.airTemperature in 22.0f..28.0f) {
                 list.add(PlantMoodle.THRIVING)
             }
 
