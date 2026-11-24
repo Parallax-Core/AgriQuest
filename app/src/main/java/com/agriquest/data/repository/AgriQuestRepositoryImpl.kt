@@ -12,6 +12,10 @@ import com.agriquest.data.remote.SupabasePlantApi
 import com.agriquest.data.remote.PlantMonitoringBinding
 import com.agriquest.data.simulation.TelemetrySimulationEngine
 import com.agriquest.domain.model.Achievement
+import com.agriquest.domain.model.OwnedPlant
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import com.agriquest.domain.model.PlantSpecies
 import com.agriquest.domain.model.ActuatorState
 import com.agriquest.domain.model.AgroQuizQuestion
 import com.agriquest.domain.model.AiScanResult
@@ -74,7 +78,15 @@ class AgriQuestRepositoryImpl(
     private val accountApi: SupabasePlantApi? = null,
     private val accountId: String? = null,
     private val plantId: String? = null,
+    /** The account's plants (Plant A first), for the plant switcher. */
+    val ownedPlants: List<OwnedPlant> = emptyList(),
+    /** Outfits are shared by the account's plants, so they're kept in Plant A's store. */
+    private val wardrobeStore: AgriQuestDataStore? = dataStore,
 ) : AgriQuestRepository {
+
+    /** The plant this repository shows. */
+    val currentPlantId: String? get() = plantId
+    val species: PlantSpecies get() = ownedPlants.firstOrNull { it.plantId == plantId }?.species ?: PlantSpecies.TOMATO
 
     companion object {
         /** Ages accepted by "How many days old is your plant?". */
@@ -82,14 +94,21 @@ class AgriQuestRepositoryImpl(
         /** A Fan/Light "off" is sent as a 1-second command; the firmware switches off for <= 1 s. */
         const val ACTUATOR_OFF_SECONDS = 1
 
-        suspend fun forAccount(context: Context, session: AuthSession): AgriQuestRepositoryImpl {
-            val store = AgriQuestDataStore(context.applicationContext, session.userId)
+        /** Opens [plantId] (or the account's first plant). XP, streak, quests and outfits are account-wide. */
+        suspend fun forAccount(context: Context, session: AuthSession, plantId: String? = null): AgriQuestRepositoryImpl {
+            val app = context.applicationContext
             val api = SupabasePlantApi(session)
-            val cloud = api.loadProgress()
+            val plants = api.listPlants()
+            val target = plants.firstOrNull { it.plantId == plantId } ?: plants.firstOrNull()
+            val accountStore = AgriQuestDataStore(app, session.userId)
+            // Plant A keeps the original per-account file; Plant B gets its own.
+            val store = if (target == null || target == plants.first()) accountStore
+                else AgriQuestDataStore(app, session.userId, target.plantId)
+            val cloud = api.loadProgress(target?.plantId)
             store.restoreCloud(cloud)
-            val repository = AgriQuestRepositoryImpl(dataStore = store, appContext = context.applicationContext,
+            val repository = AgriQuestRepositoryImpl(dataStore = store, appContext = app,
                 accountApi = api, accountId = session.userId, plantId = cloud.plantId,
-                esp32BleManager = Esp32BleManager(context.applicationContext))
+                esp32BleManager = Esp32BleManager(app), ownedPlants = plants, wardrobeStore = accountStore)
             try { repository.initialized.await() } catch (e: Exception) { repository.close(); throw e }
             try { repository._loginDays.value = api.recordAccountLogin() }
             catch (e: CancellationException) { repository.close(); throw e }
@@ -230,7 +249,7 @@ class AgriQuestRepositoryImpl(
                     _plantAvatar.value = _plantAvatar.value.copy(name = store.plantNameFlow.first())
                     _recentScans.value = store.recentScansFlow.first()
                     _plantAgeConfirmed.value = store.plantAgeConfirmedFlow.first()
-                    _wardrobe.value = store.wardrobeFlow.first()
+                    _wardrobe.value = (wardrobeStore ?: store).wardrobeFlow.first()
                     refreshHealthFromScans()
                     publishMoistureHistory(store.moistureDaysFlow.first())
 
@@ -293,6 +312,22 @@ class AgriQuestRepositoryImpl(
         }
     }
 
+    /** Sends unsaved progress now (best effort), e.g. before switching to the other plant. */
+    suspend fun flushSync() {
+        val store = dataStore ?: return
+        val api = accountApi ?: return
+        try {
+            withTimeout(8_000) {
+                if (store.cloudDirtyFlow.first()) {
+                    val (revision, progress) = store.pendingProgress()
+                    api.saveProgress(progress)
+                    store.acknowledgeSync(revision)
+                }
+            }
+        } catch (e: CancellationException) { if (e !is TimeoutCancellationException) throw e }
+        catch (_: Exception) { /* Stays saved locally and syncs when this plant is opened again. */ }
+    }
+
     fun close() {
         scope.cancel()
         accountApi?.cancelRequests()
@@ -318,10 +353,15 @@ class AgriQuestRepositoryImpl(
             _connectionState.value = ConnectionState(deviceName = proof.deviceId,
                 status = ConnectionStatus.CONNECTING, statusText = "Verifying device ownership...")
             val existing = api.listDevices().firstOrNull { it.deviceId == proof.deviceId }
-            if (existing?.plantId != null && existing.plantId != activePlantId) {
-                throw IllegalStateException("Select this device's assigned plant before reconnecting.")
+            monitoringBinding = when {
+                // Already on this board (slot 1 or 2): just reconnect.
+                existing != null && existing.plantBId == activePlantId ->
+                    api.linkPlantToDevice(activePlantId, proof.deviceId)
+                // The board already serves this account's other plant: use its second sensor/pump/lamp set.
+                existing?.plantId != null && existing.plantId != activePlantId ->
+                    api.linkPlantToDevice(activePlantId, proof.deviceId)
+                else -> api.pairDevice(activePlantId, proof)
             }
-            monitoringBinding = api.pairDevice(activePlantId, proof)
             _connectionState.value = ConnectionState(deviceName = proof.deviceId,
                 status = ConnectionStatus.AWAITING_DEVICE, statusText = "Paired; awaiting ESP32 readings")
         } finally {
@@ -604,8 +644,8 @@ class AgriQuestRepositoryImpl(
         val updated = current.copy(owned = current.owned + outfit.id, spentPoints = current.spentPoints + outfit.price,
             equipped = current.equipped + (outfit.slot to outfit.id))
         _wardrobe.value = updated
-        dataStore?.saveWardrobe(updated)
-        "You bought the ${outfit.name}! Your tomato is wearing it."
+        wardrobeStore?.saveWardrobe(updated)
+        "You bought the ${outfit.name}! Your ${species.label.lowercase()} is wearing it."
     }
 
     /** Wears an owned outfit, or takes it off if it is already worn. */
@@ -616,7 +656,7 @@ class AgriQuestRepositoryImpl(
         val updated = if (current.equipped[outfit.slot] == outfit.id) current.copy(equipped = current.equipped - outfit.slot)
             else current.copy(equipped = current.equipped + (outfit.slot to outfit.id))
         _wardrobe.value = updated
-        dataStore?.saveWardrobe(updated)
+        wardrobeStore?.saveWardrobe(updated)
     }
 
     /** "My plant is [days] days old": sets the sowing date so the game shows the right growth stage. */
@@ -819,7 +859,7 @@ class AgriQuestRepositoryImpl(
         }
 
         // 5. Trigger notification/toast callback for activation
-        val startMessage = "💧 Water pump triggered for ${durationSeconds}s! Soil moisture restored by +4% to ${updatedMoisture.toInt()}%."
+        val startMessage = "ðŸ’§ Water pump triggered for ${durationSeconds}s! Soil moisture restored by +4% to ${updatedMoisture.toInt()}%."
         onNotification(startMessage)
 
         // 6. Countdown timer execution
@@ -838,7 +878,7 @@ class AgriQuestRepositoryImpl(
         )
 
         // Notify completion
-        onNotification("✅ Water pump cycle completed! Soil moisture is now ${updatedMoisture.toInt()}%.")
+        onNotification("âœ… Water pump cycle completed! Soil moisture is now ${updatedMoisture.toInt()}%.")
     }
 
     override fun waterPlant(durationSeconds: Int): Flow<WateringStatus> = flow {
@@ -1000,7 +1040,7 @@ class AgriQuestRepositoryImpl(
     override suspend fun runTfLiteDiagnostic(): String {
         requireAiAccess()
         delay(300L)
-        return "🌿 AI Diagnostic: Leaf health optimal (98.2% confidence). Soil moisture & light conditions ideal."
+        return "ðŸŒ¿ AI Diagnostic: Leaf health optimal (98.2% confidence). Soil moisture & light conditions ideal."
     }
 
     /**

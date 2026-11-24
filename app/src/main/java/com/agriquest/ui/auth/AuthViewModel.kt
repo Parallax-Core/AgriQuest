@@ -7,6 +7,9 @@ import com.agriquest.data.remote.AuthException
 import com.agriquest.data.remote.AuthSession
 import com.agriquest.data.remote.SupabaseAuthApi
 import com.agriquest.data.repository.AgriQuestRepositoryImpl
+import com.agriquest.data.remote.SupabasePlantApi
+import com.agriquest.domain.model.MAX_PLANTS_PER_ACCOUNT
+import com.agriquest.domain.model.PlantSpecies
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,7 +27,11 @@ data class AuthUiState(
     val recoveryVerified: Boolean = false,
     val signupPending: Boolean = false,
     val signupEmail: String? = null,
-    val signupCompleted: Boolean = false
+    val signupCompleted: Boolean = false,
+    /** True while switching to, or adding, a plant. */
+    val plantBusy: Boolean = false,
+    /** A message about switching or adding a plant, shown once. */
+    val plantMessage: String? = null
 )
 
 /** Tokens live only in memory. A restored activity flag can never authorize Play. */
@@ -41,9 +48,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearFeedback() { mutableState.update { it.copy(error = null, message = null) } }
 
+    private val plantPrefs get() = getApplication<Application>()
+        .getSharedPreferences("agriquest_selected_plant", android.content.Context.MODE_PRIVATE)
+
     fun signIn(username: String, password: String) = perform {
         val session = api.signIn(username, password)
-        val repository = AgriQuestRepositoryImpl.forAccount(getApplication(), session)
+        // Reopen the plant the player looked at last (falls back to Plant A).
+        val lastPlant = plantPrefs.getString(session.userId, null)
+        val repository = AgriQuestRepositoryImpl.forAccount(getApplication(), session, lastPlant)
         mutableRepository.value?.close()
         mutableRepository.value = repository
         loginSession = session
@@ -55,6 +67,55 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             mutableRepository.value?.close()
             mutableRepository.value = null
             mutableState.update { it.copy(authenticated = false, message = "Your session expired. Please log in again.") }
+        }
+    }
+
+    fun clearPlantMessage() { mutableState.update { it.copy(plantMessage = null) } }
+
+    /** Shows the account's other plant. XP, streak, quests and outfits stay the same. */
+    fun switchPlant(plantId: String) = performPlant {
+        val session = loginSession ?: throw AuthException("Please log in again.")
+        val current = mutableRepository.value
+        if (current?.currentPlantId == plantId) return@performPlant
+        current?.flushSync()
+        val next = AgriQuestRepositoryImpl.forAccount(getApplication(), session, plantId)
+        if (loginSession !== session) { next.close(); return@performPlant }
+        mutableRepository.value = next
+        current?.close()
+        plantPrefs.edit().putString(session.userId, plantId).apply()
+    }
+
+    /** Adds the account's second plant and switches to it. */
+    fun addPlant(species: PlantSpecies, name: String) = performPlant {
+        val session = loginSession ?: throw AuthException("Please log in again.")
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || trimmed.length > 40) throw AuthException("Give your plant a name of 1 to 40 characters.")
+        if ((mutableRepository.value?.ownedPlants?.size ?: 0) >= MAX_PLANTS_PER_ACCOUNT)
+            throw AuthException("You can have at most $MAX_PLANTS_PER_ACCOUNT plants.")
+        val newId = SupabasePlantApi(session).addPlant(species, trimmed)
+        val current = mutableRepository.value
+        current?.flushSync()
+        val next = AgriQuestRepositoryImpl.forAccount(getApplication(), session, newId)
+        if (loginSession !== session) { next.close(); return@performPlant }
+        mutableRepository.value = next
+        current?.close()
+        plantPrefs.edit().putString(session.userId, newId).apply()
+        mutableState.update { it.copy(plantMessage = "$trimmed the ${species.label.lowercase()} was added.") }
+    }
+
+    private fun performPlant(action: suspend () -> Unit) {
+        if (state.value.plantBusy) return
+        mutableState.update { it.copy(plantBusy = true, plantMessage = null) }
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                mutableState.update { it.copy(plantMessage = e.message ?: "Couldn't load that plant. Check your connection.") }
+            } finally {
+                mutableState.update { it.copy(plantBusy = false) }
+            }
         }
     }
 

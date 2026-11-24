@@ -34,6 +34,10 @@ import com.agriquest.ui.splash.SplashScreen
 import com.agriquest.ui.theme.AgriQuestTheme
 import com.agriquest.ui.viewmodel.AgriQuestViewModel
 import com.agriquest.ui.updates.AppUpdatePrompt
+import androidx.compose.runtime.CompositionLocalProvider
+import com.agriquest.ui.components.AddPlantDialog
+import com.agriquest.ui.components.LocalPlantSpecies
+import com.agriquest.ui.components.PlantSwitcher
 
 class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
@@ -60,7 +64,7 @@ class MainActivity : ComponentActivity() {
                         onStartGame = { isStarted = true }
                     )
                 } else {
-                    AccountDashboard(requireNotNull(repository), onSignOut = authViewModel::signOut)
+                    AccountDashboard(requireNotNull(repository), authViewModel, onSignOut = authViewModel::signOut)
                 }
             }
         }
@@ -68,7 +72,21 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AccountDashboard(repository: AgriQuestRepositoryImpl, onSignOut: () -> Unit) {
+private fun AccountDashboard(repository: AgriQuestRepositoryImpl, authViewModel: AuthViewModel, onSignOut: () -> Unit) {
+    val authState by authViewModel.state.collectAsStateWithLifecycle()
+    var addingPlant by rememberSaveable { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(authState.plantMessage) {
+        authState.plantMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            authViewModel.clearPlantMessage()
+        }
+    }
+    // Close the dialog once the new plant is showing.
+    LaunchedEffect(repository) { addingPlant = false }
+    if (addingPlant) {
+        AddPlantDialog(busy = authState.plantBusy, onAdd = authViewModel::addPlant, onDismiss = { addingPlant = false })
+    }
     // Removing this account from composition cancels its ViewModel jobs as well.
     val store = remember(repository) { ViewModelStore() }
     val owner = remember(store) { object : ViewModelStoreOwner { override val viewModelStore = store } }
@@ -85,11 +103,16 @@ private fun AccountDashboard(repository: AgriQuestRepositoryImpl, onSignOut: () 
     Column(Modifier.fillMaxSize()) {
         Surface(color = AppAccentBackground, contentColor = AppCardBackground) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+                verticalAlignment = Alignment.CenterVertically) {
+                PlantSwitcher(plants = repository.ownedPlants, currentPlantId = repository.currentPlantId,
+                    busy = authState.plantBusy, onSwitch = authViewModel::switchPlant, onAdd = { addingPlant = true },
+                    modifier = Modifier.weight(1f))
                 TextButton(onClick = { confirmingLogout = true }, colors = ButtonDefaults.textButtonColors(contentColor = AppCardBackground)) { Text("Log Out") }
             }
         }
-        DashboardScreen(modifier = Modifier.weight(1f), viewModel = accountViewModel)
+        CompositionLocalProvider(LocalPlantSpecies provides repository.species) {
+            DashboardScreen(modifier = Modifier.weight(1f), viewModel = accountViewModel)
+        }
     }
 }
 

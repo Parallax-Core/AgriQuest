@@ -3,8 +3,11 @@ package com.agriquest.domain.model
 import org.json.JSONObject
 
 data class Esp32DiscoveredDevice(val deviceName: String, val macAddress: String, val serviceUuid: String, val rssi: Int)
-data class OwnedEsp32Device(val deviceId: String, val plantId: String?)
-data class OwnedPlant(val plantId: String, val name: String)
+/** One board serves up to two plants: [plantId] on slot 1 and [plantBId] on slot 2. */
+data class OwnedEsp32Device(val deviceId: String, val plantId: String?, val plantBId: String? = null) {
+    fun serves(plant: String) = plantId == plant || plantBId == plant
+}
+data class OwnedPlant(val plantId: String, val name: String, val species: PlantSpecies = PlantSpecies.TOMATO)
 
 /** Memory-only, one-use physical-access proof. Never persist or log this code. */
 class DevicePairingProof(val deviceId: String, val pairingCode: String) {

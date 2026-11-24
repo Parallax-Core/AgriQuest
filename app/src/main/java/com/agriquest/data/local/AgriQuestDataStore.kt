@@ -36,7 +36,8 @@ import kotlinx.coroutines.flow.map
 class AgriQuestDataStore(
     private val dataStore: DataStore<Preferences>
 ) {
-    constructor(context: Context, accountId: String) : this(AccountStorage.get(context, accountId))
+    constructor(context: Context, accountId: String, plantId: String? = null) :
+        this(AccountStorage.get(context, accountId, plantId))
 
     companion object {
         val KEY_TRACKING_START = stringPreferencesKey("growth_tracking_start")

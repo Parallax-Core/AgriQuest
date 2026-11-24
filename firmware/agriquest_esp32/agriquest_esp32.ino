@@ -11,6 +11,9 @@
  *     A "light" command switches the grow lamp (relay 3, GPIO 25) on for the requested seconds,
  *     or off when the duration is 1 s. "fan" commands are reported as not fitted (no fan yet).
  *   - Shows moisture, pump state and errors on the 16x2 I2C LCD.
+ *   - Plant B (an account's second plant) can share this board with its own soil sensor (GPIO 35),
+ *     pump (relay 2, GPIO 27) and lamp (relay 4, GPIO 33). Off until PLANT_B_FITTED is set to 1;
+ *     until then, Plant B commands are reported back as "not fitted".
  *
  * Safety on the ESP32 itself (the database checks run time and cooldown too, but hardware must not
  * rely on that alone):
@@ -51,6 +54,14 @@
 const int SOIL_PIN = 34;                    // ADC1 pin: still works while Wi-Fi is on
 const int RELAY_PIN = 26;                   // relay module IN1: water pump
 const int LIGHT_PIN = 25;                   // relay module IN3: grow lamp
+
+// Plant B (the account's second plant) on the same board: its own soil sensor, pump and lamp.
+// Readings go to slot 2 (p_slot = 2) and commands with "slot":2 drive only these pins, so a
+// Plant A command never waters Plant B. Set to 1 once the parts are wired.
+#define PLANT_B_FITTED 0
+const int SOIL_PIN_B = 35;                  // ADC1 pin (input only), second soil sensor
+const int RELAY_PIN_B = 27;                 // relay module IN2: Plant B's pump
+const int LIGHT_PIN_B = 33;                 // relay module IN4: Plant B's grow lamp
 const int LCD_SDA = 21;
 const int LCD_SCL = 22;
 
@@ -98,21 +109,31 @@ void switchOn(int pin) {
 
 void relayOff() { switchOff(RELAY_PIN); }
 
-// ----------------------------------------------------------------- grow lamp (relay 3)
-bool lampOn = false;
+// ----------------------------------------------------------------- grow lamps (relay 3 = Plant A, relay 4 = Plant B)
+bool lampOn = false;                       // Plant A's lamp (also the Serial "lamp" test)
 unsigned long lampOffAt = 0;               // millis() when a timed lamp command ends; 0 = stays as set
+bool lampOnB = false;
+unsigned long lampOffAtB = 0;
 
-void setLamp(bool on, unsigned long seconds = 0) {
-  lampOn = on;
-  if (on) switchOn(LIGHT_PIN); else switchOff(LIGHT_PIN);
-  lampOffAt = (on && seconds > 0) ? millis() + seconds * 1000UL : 0;
-  if (on && seconds > 0) Serial.printf("LAMP ON for %lu s\n", seconds);
-  else Serial.println(on ? "LAMP ON" : "LAMP OFF");
+// slot 1 = Plant A, slot 2 = Plant B
+void setLamp(bool on, unsigned long seconds = 0, int slot = 1) {
+  unsigned long offAt = (on && seconds > 0) ? millis() + seconds * 1000UL : 0;
+  if (slot == 2) {
+    lampOnB = on; lampOffAtB = offAt;
+    if (on) switchOn(LIGHT_PIN_B); else switchOff(LIGHT_PIN_B);
+  } else {
+    lampOn = on; lampOffAt = offAt;
+    if (on) switchOn(LIGHT_PIN); else switchOff(LIGHT_PIN);
+  }
+  const char *who = slot == 2 ? "Plant B " : "";
+  if (on && seconds > 0) Serial.printf("%sLAMP ON for %lu s\n", who, seconds);
+  else Serial.printf("%sLAMP %s\n", who, on ? "ON" : "OFF");
 }
 
 // Switches a timed lamp off when its time is up (called from loop, so nothing blocks).
 void checkLampTimer() {
-  if (lampOn && lampOffAt != 0 && (long)(millis() - lampOffAt) >= 0) setLamp(false);
+  if (lampOn && lampOffAt != 0 && (long)(millis() - lampOffAt) >= 0) setLamp(false, 0, 1);
+  if (lampOnB && lampOffAtB != 0 && (long)(millis() - lampOffAtB) >= 0) setLamp(false, 0, 2);
 }
 
 void relayOn() { switchOn(RELAY_PIN); }
@@ -182,10 +203,10 @@ void connectWifi() {
 }
 
 // ----------------------------------------------------------------- soil sensor
-int readSoilRaw() {
+int readSoilRaw(int pin = SOIL_PIN) {
   long total = 0;
   for (int i = 0; i < 10; i++) {           // average 10 samples to smooth noise
-    total += analogRead(SOIL_PIN);
+    total += analogRead(pin);
     delay(5);
   }
   return total / 10;
@@ -202,6 +223,13 @@ float readMoisturePercent() {
   float vwc = SOIL_CAL_INTERCEPT + SOIL_CAL_SLOPE * raw;   // estimated volumetric water content, %
   return constrain(vwc, 0.0, SOIL_MAX_VWC);
 #endif
+}
+
+// Plant B's soil sensor, same calibration as Plant A's (recalibrate if it's a different sensor).
+float readMoisturePercentB() {
+  int raw = readSoilRaw(SOIL_PIN_B);
+  Serial.printf("Plant B soil raw value: %d\n", raw);
+  return constrain(SOIL_CAL_INTERCEPT + SOIL_CAL_SLOPE * raw, 0.0, SOIL_MAX_VWC);
 }
 
 // ----------------------------------------------------------------- Supabase
@@ -230,13 +258,14 @@ String deviceJson() {
   return String("\"p_device_id\":\"") + DEVICE_ID + "\",\"p_token\":\"" + DEVICE_TOKEN + "\"";
 }
 
-// Sends one reading. Returns the HTTP status (200 = saved).
-int sendReading(float moisture) {
+// Sends one reading for slot 1 (Plant A) or slot 2 (Plant B). Returns the HTTP status (200 = saved).
+int sendReading(float moisture, int slot = 1) {
   String reply;
   int status = callRpc("submit_reading", String("{") + deviceJson() +
-                       ",\"p_soil_moisture\":" + String(moisture, 1) + "}", reply);
+                       ",\"p_soil_moisture\":" + String(moisture, 1) +
+                       (slot == 2 ? ",\"p_slot\":2" : "") + "}", reply);
   if (status == 200) {
-    Serial.printf("Saved reading #%s: soil %.1f%%\n", reply.c_str(), moisture);
+    Serial.printf("Saved %sreading #%s: soil %.1f%%\n", slot == 2 ? "Plant B " : "", reply.c_str(), moisture);
   } else {
     // 400/401/403 with "Unknown device or wrong token" = DEVICE_ID or DEVICE_TOKEN in secrets.h is wrong;
     // "Device is unassigned" = the device isn't linked to a plant any more.
@@ -293,18 +322,19 @@ void reportLeftoverCommand() {
   memory.remove("unreported");             // report once; Supabase times it out otherwise
 }
 
-// Runs the pump for the given seconds (capped), with the relay off again afterwards.
-void runPump(int seconds) {
+// Runs slot 1's (Plant A) or slot 2's (Plant B) pump for the given seconds (capped), then switches it off.
+void runPump(int seconds, int slot = 1) {
+  const int pin = slot == 2 ? RELAY_PIN_B : RELAY_PIN;
   seconds = constrain(seconds, 1, MAX_PUMP_SECONDS);
-  Serial.printf("PUMP ON for %d s\n", seconds);
-  showLine(0, String("PUMP ON ") + seconds + "s");
-  relayOn();
+  Serial.printf("%sPUMP ON for %d s\n", slot == 2 ? "Plant B " : "", seconds);
+  showLine(0, String(slot == 2 ? "B PUMP ON " : "PUMP ON ") + seconds + "s");
+  switchOn(pin);
   for (int left = seconds; left > 0; left--) {
     esp_task_wdt_reset();
     showLine(1, String("Watering... ") + left);
     delay(1000);
   }
-  relayOff();
+  switchOff(pin);
   Serial.println("PUMP OFF");
   delay(300);                              // let the motor's switch-off spike settle
   if (lcd) { lcd->init(); lcd->backlight(); }   // redraw cleanly in case the spike garbled the LCD
@@ -355,22 +385,30 @@ void checkCommands() {
     long id = jsonNumber(command, "id");
     String actuator = jsonText(command, "actuator");
     int seconds = (int)jsonNumber(command, "duration_s");
+    int slot = jsonNumber(command, "slot") == 2 ? 2 : 1;   // older databases send no slot: Plant A
     if (id < 0) continue;
+
+    if (slot == 2 && !PLANT_B_FITTED) {
+      Serial.printf("Command #%ld is for Plant B, whose sensor and actuators aren't fitted yet\n", id);
+      reportCommand(id, false, "Plant B's sensor and actuators aren't fitted on the device yet.");
+      continue;
+    }
 
     if (actuator == "pump") {
       memory.putLong("unreported", id);    // if the pump's spike freezes the ESP32, report it after the restart
-      runPump(seconds);
+      runPump(seconds, slot);
       reportCommand(id, true, nullptr);
       lastReadingAt = 0;   // send a fresh reading right away so the app shows the change
     } else if (actuator == "light") {
       // The app's Light button: on for duration_s seconds, or OFF when duration_s is 1 (the database
       // needs at least 1 s). Reporting "done" right after switching is the app's confirmation.
+      String who = slot == 2 ? "B lamp " : "Lamp ";
       if (seconds <= 1) {
-        setLamp(false);
-        showLine(1, "Lamp OFF");
+        setLamp(false, 0, slot);
+        showLine(1, who + "OFF");
       } else {
-        setLamp(true, seconds);              // runs in the background; loop() switches it off
-        showLine(1, String("Lamp on ") + seconds + "s");
+        setLamp(true, seconds, slot);        // runs in the background; loop() switches it off
+        showLine(1, who + "on " + seconds + "s");
       }
       reportCommand(id, true, nullptr);
     } else {
@@ -450,7 +488,9 @@ void printResetReason() {
 
 void setup() {
   relayOff();                    // pump off before anything else
-  switchOff(LIGHT_PIN);          // lamp off too
+  switchOff(RELAY_PIN_B);        // Plant B's pump too
+  switchOff(LIGHT_PIN);          // lamps off too
+  switchOff(LIGHT_PIN_B);
   Serial.begin(115200);
   delay(300);
   Serial.println("\nAgriQuest ESP32 starting");
@@ -476,6 +516,7 @@ void loop() {
   esp_task_wdt_reset();
   if (WiFi.status() != WL_CONNECTED) {
     relayOff();
+    switchOff(RELAY_PIN_B);
     connectWifi();
     if (WiFi.status() != WL_CONNECTED) {
       delay(5000);
@@ -494,6 +535,9 @@ void loop() {
   if (!autoPaused && (lastReadingAt == 0 || millis() - lastReadingAt >= READ_INTERVAL_MS)) {
     lastReadingAt = millis();
     sendAndShow(readMoisturePercent());
+#if PLANT_B_FITTED
+    sendReading(readMoisturePercentB(), 2);   // Plant B: its own reading, its own plant in the app
+#endif
   }
   delay(100);
 }

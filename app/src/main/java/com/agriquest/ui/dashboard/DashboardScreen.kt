@@ -403,7 +403,7 @@ fun HomeDashboardContent(
             HorizontalDivider(color = AppCardBorder)
             TelemetryGrid(telemetry = uiState.telemetry, compact = true, embedded = true)
             HorizontalDivider(color = AppCardBorder)
-            PixelHeading("Tomato Stages")
+            PixelHeading("${com.agriquest.ui.components.LocalPlantSpecies.current.label} Stages")
             PlantStagesTimeline()
             HorizontalDivider(color = AppCardBorder)
             PixelHeading("Today's Quests", trailing = {

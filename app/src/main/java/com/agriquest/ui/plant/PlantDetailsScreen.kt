@@ -32,7 +32,11 @@ fun PlantDetailsScreenContent(modifier: Modifier = Modifier, uiState: AgriQuestU
     var addingNote by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf("") }
     AppScreen(uiState, selectedTab, onTabSelected, snackbarHostState, modifier) {
-        PixelPageHeader(uiState.plant.title.replace("🍅", "").trim(), "Plant Details", uiState)
+        val species = com.agriquest.ui.components.LocalPlantSpecies.current
+        // Tomato: Lycopersicum; eggplant: Melongena (Solanum melongena).
+        val title = if (species == com.agriquest.domain.model.PlantSpecies.EGGPLANT) "Melongena"
+            else uiState.plant.title.replace("🍅", "").trim()
+        PixelPageHeader(title, "Plant Details", uiState)
         PlantHeroCard(uiState.plant)
         PixelPanel {
             PixelHeading("Growth Timeline")
