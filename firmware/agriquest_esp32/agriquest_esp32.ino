@@ -147,11 +147,14 @@ void setupLcd() {
 
 // ----------------------------------------------------------------- Wi-Fi
 void connectWifi() {
+  static int failedAttempts = 0;   // failures in a row; reset once connected
   if (WiFi.status() == WL_CONNECTED) return;
   showLine(0, "WiFi connecting");
   showLine(1, WIFI_SSID);
   Serial.printf("Connecting to Wi-Fi \"%s\"", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();          // clear a stuck earlier attempt, e.g. after the hotspot was switched off
+  delay(100);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long started = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - started < 20000) {
@@ -160,13 +163,21 @@ void connectWifi() {
     Serial.print('.');
   }
   if (WiFi.status() == WL_CONNECTED) {
+    failedAttempts = 0;
     Serial.printf("\nWi-Fi connected, IP %s\n", WiFi.localIP().toString().c_str());
     showLine(0, "WiFi connected");
     showLine(1, WiFi.localIP().toString());
   } else {
-    Serial.println("\nWi-Fi failed (wrong password, or not a 2.4 GHz network?). Retrying later.");
+    failedAttempts++;
+    Serial.printf("\nWi-Fi failed (attempt %d; hotspot off, wrong password, or not 2.4 GHz?). Retrying in 5 s.\n", failedAttempts);
     showLine(0, "WiFi failed");
     showLine(1, "Retrying...");
+    if (failedAttempts >= 6) {   // about 2.5 minutes of failures: a clean restart resets the Wi-Fi driver
+      Serial.println("Restarting the ESP32 to reset Wi-Fi (the pump is off at boot).");
+      relayOff();
+      delay(200);
+      ESP.restart();
+    }
   }
 }
 

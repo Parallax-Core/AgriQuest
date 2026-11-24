@@ -25,9 +25,39 @@ class SupabaseAuthApi(
     }
 
     suspend fun signUp(username: String, email: String, password: String) {
+        if (!isUsernameAvailable(username)) throw AuthException(USERNAME_TAKEN)
         // Never treat a signup response as a successful password login.
-        request("/signup", body = JSONObject().put("email", email.trim()).put("password", password)
+        val response = request("/signup", body = JSONObject().put("email", email.trim()).put("password", password)
             .put("data", JSONObject().put("username", username.trim())))
+        // For an email that already has a verified account, Auth answers "success" without sending a code.
+        // That reply carries an empty identities list, which is how the app tells it apart from a real signup.
+        val user = response.optJSONObject("user") ?: response
+        val identities = user.optJSONArray("identities")
+        if (identities != null && identities.length() == 0) throw AuthException(EMAIL_REGISTERED)
+    }
+
+    /** Asks the database whether a username is free (case and spaces ignored). Unknown = let signup decide. */
+    suspend fun isUsernameAvailable(username: String): Boolean = withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank() || publicKey.isBlank()) return@withContext true
+        val connection = openConnection(URL(baseUrl.trimEnd('/') + "/rest/v1/rpc/is_username_available"))
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 15_000
+            connection.instanceFollowRedirects = false
+            connection.setRequestProperty("apikey", publicKey)
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+            connection.outputStream.use {
+                it.write(JSONObject().put("p_username", username.trim()).toString().toByteArray(Charsets.UTF_8))
+            }
+            if (connection.responseCode !in 200..299) return@withContext true   // check not deployed yet: the database rule still applies
+            connection.inputStream.bufferedReader().use { it.readText() }.trim() != "false"
+        } catch (e: IOException) {
+            throw AuthException("Could not reach the authentication server. Check your connection and try again.")
+        } finally {
+            connection.disconnect()
+        }
     }
 
     suspend fun requestRecovery(email: String) {
@@ -108,6 +138,8 @@ class SupabaseAuthApi(
                     code == "email_not_confirmed" -> "Confirm your email before logging in."
                     code == "otp_expired" -> "This code is invalid or expired. Request a new code."
                     code == "weak_password" -> "Choose a stronger password with at least 8 characters."
+                    code == "user_already_exists" || code == "email_exists" -> EMAIL_REGISTERED
+                    path == "/signup" && json.optString("msg").contains("Database error saving new user") -> USERNAME_TAKEN
                     status == 429 -> "Too many requests. Wait before trying again."
                     code.startsWith("hook_") || code == "unexpected_failure" -> "Email could not be sent. Wait before retrying, or contact support."
                     path == "/verify" -> "This code could not be verified. Check it or request another code."
@@ -122,5 +154,10 @@ class SupabaseAuthApi(
         } finally {
             connection.disconnect()
         }
+    }
+
+    companion object {
+        const val USERNAME_TAKEN = "That username is already taken. Try another one."
+        const val EMAIL_REGISTERED = "This email is already registered. Log in or reset your password."
     }
 }
