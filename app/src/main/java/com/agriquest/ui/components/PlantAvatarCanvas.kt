@@ -25,17 +25,18 @@ fun PlantAvatarCanvas(
     growthStage: PlantGrowthStage = PlantGrowthStage.GERMINATION,
     size: Dp = 140.dp
 ) {
-    val imageRes = when (growthStage) {
-        PlantGrowthStage.GERMINATION -> R.drawable.tomato_stages_germination
-        PlantGrowthStage.SEEDLING_SPROUT -> R.drawable.tomato_stages_seedling
-        PlantGrowthStage.VEGETATIVE_LEAFY -> R.drawable.tomato_stages_vegetative
-        PlantGrowthStage.FLOWERING -> R.drawable.tomato_stages_flowering
-        PlantGrowthStage.FRUITING_HARVEST -> R.drawable.tomato_stages_fruit
-        PlantGrowthStage.RIPENING -> R.drawable.tomato_stages_ripening
+    val look = when (growthStage) {
+        PlantGrowthStage.GERMINATION -> TomatoLook.SPROUT
+        PlantGrowthStage.SEEDLING_SPROUT -> TomatoLook.SEEDLING
+        PlantGrowthStage.VEGETATIVE_LEAFY -> TomatoLook.VEGETATIVE
+        PlantGrowthStage.FLOWERING -> TomatoLook.FLOWERING
+        PlantGrowthStage.FRUITING_HARVEST -> TomatoLook.GREEN_FRUIT
+        PlantGrowthStage.RIPENING -> TomatoLook.RIPE_FRUIT
     }
+    val species = LocalPlantSpecies.current
     Image(
-        painter = painterResource(id = imageRes),
-        contentDescription = "Tomato plant: ${growthStage.stageTitle}",
+        painter = painterResource(id = look.image(species)),
+        contentDescription = "${species.label} plant: ${growthStage.stageTitle}",
         modifier = modifier.size(size),
         contentScale = ContentScale.Fit
     )

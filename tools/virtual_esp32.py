@@ -87,6 +87,8 @@ def main():
     parser.add_argument("--dry-rate", type=float, default=0.8)
     parser.add_argument("--url", default=props.get("agriquest.supabaseUrl", ""))
     parser.add_argument("--key", default=props.get("agriquest.supabaseAnonKey") or props.get("agriquest.supabaseKey", ""))
+    parser.add_argument("--plant-b", action="store_true",
+                        help="also simulate Plant B's soil sensor and pump on slot 2 (link Plant B to this device in the app first)")
     parser.add_argument("--once", action="store_true", help=argparse.SUPPRESS)  # testing: stop after one pump run
     args = parser.parse_args()
     if not args.url.startswith(("https://", "http://localhost", "http://127.0.0.1")) or not args.key:
@@ -95,22 +97,27 @@ def main():
         sys.exit("No device token. Run tools/new_device_token.py first, then pass --token.")
 
     esp = Device(args.url, args.key, args.device, args.token)
-    moisture = args.moisture
+    # slot 1 = Plant A, slot 2 = Plant B (each has its own soil sensor and pump)
+    slots = [1, 2] if args.plant_b else [1]
+    moisture = {slot: args.moisture for slot in slots}
+    label = {1: "", 2: "Plant B "}
     next_reading = 0.0
     print(f"{args.device}: a reading every {args.interval:g} s, pump check every {POLL_SECONDS} s. Ctrl+C to stop.\n")
 
     while True:
         if time.time() >= next_reading:
-            moisture = max(0.0, moisture - args.dry_rate + random.uniform(-0.2, 0.2))
-            try:
-                reading_id = esp.rpc("submit_reading", p_soil_moisture=round(moisture, 1))
-                print(f"{now()}  reading #{reading_id} sent: soil moisture {moisture:.1f}%")
-            except RuntimeError as e:
-                if "wrong token" in str(e) or "unassigned" in str(e).lower():
-                    sys.exit(f"Supabase refused the device ({e}). Check --device/--token and that the SQL was run.")
-                print(f"{now()}  could not send reading ({e})")
-            except urllib.error.URLError as e:  # keep running through network blips, like the firmware
-                print(f"{now()}  could not send reading ({e.reason})")
+            for slot in slots:
+                moisture[slot] = max(0.0, moisture[slot] - args.dry_rate + random.uniform(-0.2, 0.2))
+                try:
+                    extra = {"p_slot": 2} if slot == 2 else {}
+                    reading_id = esp.rpc("submit_reading", p_soil_moisture=round(moisture[slot], 1), **extra)
+                    print(f"{now()}  {label[slot]}reading #{reading_id} sent: soil moisture {moisture[slot]:.1f}%")
+                except RuntimeError as e:
+                    if "wrong token" in str(e) or "unassigned" in str(e).lower():
+                        sys.exit(f"Supabase refused the device ({e}). Check --device/--token and that the SQL was run.")
+                    print(f"{now()}  could not send {label[slot]}reading ({e})")
+                except urllib.error.URLError as e:  # keep running through network blips, like the firmware
+                    print(f"{now()}  could not send reading ({e.reason})")
             next_reading = time.time() + args.interval
 
         try:
@@ -120,20 +127,21 @@ def main():
             commands = []
 
         for command in commands:
-            if command["actuator"] != "pump":
+            slot = 2 if command.get("slot") == 2 else 1
+            if command["actuator"] != "pump" or slot not in slots:
                 esp.rpc("report_command", p_command_id=command["id"], p_success=False,
                         p_message="This actuator is not fitted on the device yet.")
                 continue
             seconds = max(1, min(int(command["duration_s"]), MAX_PUMP_SECONDS))
-            print(f"{now()}  >>> PUMP ON for {seconds} s (command #{command['id']})")
+            print(f"{now()}  >>> {label[slot]}PUMP ON for {seconds} s (command #{command['id']})")
             time.sleep(seconds)
-            moisture = min(100.0, moisture + PUMP_GAIN_PER_SECOND * seconds)
+            moisture[slot] = min(100.0, moisture[slot] + PUMP_GAIN_PER_SECOND * seconds)
             esp.rpc("report_command", p_command_id=command["id"], p_success=True)
-            print(f"{now()}  <<< pump off, reported done")
+            print(f"{now()}  <<< {label[slot]}pump off, reported done")
             next_reading = 0  # send a fresh reading right away so the app shows the change
             if args.once:
-                esp.rpc("submit_reading", p_soil_moisture=round(moisture, 1))
-                print(f"{now()}  reading sent: soil moisture {moisture:.1f}%")
+                esp.rpc("submit_reading", p_soil_moisture=round(moisture[slot], 1), **({"p_slot": 2} if slot == 2 else {}))
+                print(f"{now()}  reading sent: soil moisture {moisture[slot]:.1f}%")
                 return
 
         time.sleep(POLL_SECONDS)

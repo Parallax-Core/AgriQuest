@@ -32,7 +32,7 @@ import com.agriquest.ui.theme.AppTextColor
 fun OutfitShopPanel(wardrobe: Wardrobe, totalXp: Int, onBuy: (String) -> Unit, onToggle: (String) -> Unit) {
     val points = wardrobe.points(totalXp)
     PixelPanel {
-        PixelHeading("Tomato Outfits", trailing = { PixelChip("$points points") })
+        PixelHeading("${com.agriquest.ui.components.LocalPlantSpecies.current.label} Outfits", trailing = { PixelChip("$points points") })
         Text("Earn points with XP from quests and quizzes. Spending points doesn't lower your level.",
             style = MaterialTheme.typography.bodySmall, color = AppTextColor)
         Outfit.CATALOG.chunked(2).forEach { row ->

@@ -111,14 +111,35 @@ class SupabasePlantApi(
     private fun claim(id: String, date: String, xp: Int) = JSONObject().put("user_id", session.userId)
         .put("quest_id", id).put("quest_date", date).put("exp_awarded", xp)
 
+    /** The account's plants, oldest first (Plant A, then Plant B). */
     suspend fun listPlants(): List<OwnedPlant> {
-        val data = rows("plants?owner_id=eq.$userFilter&select=id,name&order=created_at.asc")
-        return (0 until data.length()).map { data.getJSONObject(it).let { plant -> OwnedPlant(plant.getString("id"), plant.getString("name")) } }
+        val data = rows("plants?owner_id=eq.$userFilter&select=id,name,cultivar&order=created_at.asc")
+        return (0 until data.length()).map { data.getJSONObject(it).let { plant ->
+            OwnedPlant(plant.getString("id"), plant.getString("name"), PlantSpecies.fromKey(plant.nullableString("cultivar")))
+        } }
+    }
+
+    /** Adds the account's second plant (the server allows at most 2). Returns its id. */
+    suspend fun addPlant(species: PlantSpecies, name: String): String {
+        val raw = request("rpc/add_plant", "POST", JSONObject().put("p_species", species.key)
+            .put("p_name", name.trim()).toString(), returnRepresentation = true)
+        return JSONArray("[$raw]").getString(0)
     }
 
     suspend fun listDevices(): List<OwnedEsp32Device> {
-        val data = rows("devices?owner_id=eq.$userFilter&select=id,plant_id&order=created_at.asc")
-        return (0 until data.length()).map { data.getJSONObject(it).let { device -> OwnedEsp32Device(device.getString("id"), device.nullableString("plant_id")) } }
+        val data = rows("devices?owner_id=eq.$userFilter&select=id,plant_id,plant_b_id&order=created_at.asc")
+        return (0 until data.length()).map { data.getJSONObject(it).let { device ->
+            OwnedEsp32Device(device.getString("id"), device.nullableString("plant_id"), device.nullableString("plant_b_id"))
+        } }
+    }
+
+    /** Puts this plant on slot 2 (second soil sensor, pump and lamp) of a board the account already owns. */
+    suspend fun linkPlantToDevice(plantId: String, deviceId: String): PlantMonitoringBinding {
+        request("rpc/link_plant_to_device", "POST", JSONObject().put("p_plant_id", plantId)
+            .put("p_device_id", deviceId).toString())
+        listDevices().singleOrNull { it.deviceId == deviceId && it.plantBId == plantId }
+            ?: throw IOException("Device assignment could not be verified.")
+        return PlantMonitoringBinding(session.userId, plantId, deviceId)
     }
 
     suspend fun recordAccountLogin(): Int = request("rpc/record_account_login", "POST", "{}").trim().toInt().coerceIn(0, 7)
@@ -141,10 +162,12 @@ class SupabasePlantApi(
 
     suspend fun monitoringBinding(plantId: String, deviceId: String? = null): PlantMonitoringBinding? {
         if (deviceId != null) {
-            val device = listDevices().singleOrNull { it.deviceId == deviceId && it.plantId == plantId } ?: return null
+            val device = listDevices().singleOrNull { it.deviceId == deviceId && it.serves(plantId) } ?: return null
             return PlantMonitoringBinding(session.userId, plantId, device.deviceId)
         }
-        val device = rows("devices?owner_id=eq.$userFilter&plant_id=eq.${encode(plantId)}&select=id&order=created_at.asc&limit=1").optJSONObject(0)
+        // A plant is on slot 1 (plant_id) or slot 2 (plant_b_id) of a board.
+        val plant = encode(plantId)
+        val device = rows("devices?owner_id=eq.$userFilter&or=(plant_id.eq.$plant,plant_b_id.eq.$plant)&select=id&order=created_at.asc&limit=1").optJSONObject(0)
             ?: return null
         return PlantMonitoringBinding(session.userId, plantId, device.getString("id"))
     }
@@ -182,14 +205,26 @@ class SupabasePlantApi(
     fun cancelRequests() { client.dispatcher.cancelAll() }
     private fun JSONObject.nullableString(key: String) = if (isNull(key)) null else optString(key).takeIf(String::isNotBlank)
 
-    private suspend fun request(path: String, method: String = "GET", body: String? = null, merge: Boolean = false): String = withContext(Dispatchers.IO) {
+    private suspend fun request(path: String, method: String = "GET", body: String? = null, merge: Boolean = false,
+                                returnRepresentation: Boolean = false): String = withContext(Dispatchers.IO) {
         require(baseUrl.startsWith("https://") && publicKey.isNotBlank())
         val request = Request.Builder().url(baseUrl.trimEnd('/') + "/rest/v1/" + path)
             .header("apikey", publicKey).header("Authorization", "Bearer ${session.accessToken}")
-            .header("Prefer", if (merge) "resolution=merge-duplicates,return=minimal" else "return=minimal")
+            .header("Prefer", when {
+                merge -> "resolution=merge-duplicates,return=minimal"
+                returnRepresentation -> "return=representation"
+                else -> "return=minimal"
+            })
             .method(method, body?.toRequestBody("application/json".toMediaType())).build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
+                if (path.startsWith("rpc/add_plant")) {
+                    throw IOException(if (response.code == 400 && response.body?.string().orEmpty().contains("at most 2"))
+                        "You can have at most 2 plants." else "The plant could not be added (HTTP ${response.code}).")
+                }
+                if (path.startsWith("rpc/link_plant_to_device")) {
+                    throw IOException("This board could not be shared with this plant (HTTP ${response.code}).")
+                }
                 if (path.startsWith("rpc/pair_device") || path.startsWith("rpc/unpair_device")) {
                     throw IOException(when (response.code) {
                         401 -> "The pairing proof expired or was already used. Press the device pairing button again."
